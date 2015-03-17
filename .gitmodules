@@ -1,0 +1,3 @@
+[submodule "iptables"]
+	path = iptables
+	url = git://git.netfilter.org/iptables.git
