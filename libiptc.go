@@ -47,8 +47,7 @@ type XtcHandle struct {
 }
 
 type XtCounters struct {
-	// 2 uint64, as defined in x_tables.h
-	counters _Ctype_struct_xt_counters
+	Pcnt, Bcnt uint64
 }
 
 type IptEntry struct {
@@ -226,12 +225,15 @@ func (this XtcHandle) GetPolicy(chain string) (policy string, counters XtCounter
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
-		cStr = C.iptc_get_policy(cStr, &counters.counters, this.xtc_handle)
+		var c _Ctype_struct_xt_counters
+		cStr = C.iptc_get_policy(cStr, &c, this.xtc_handle)
 		if cStr == nil {
 			// no chains
 			policy = ""
 		} else {
 			policy = C.GoString(cStr)
+			counters.Bcnt = uint64(c.bcnt)
+			counters.Pcnt = uint64(c.pcnt)
 		}
 	}, "iptc_get_policy")
 	return
@@ -421,15 +423,22 @@ func (this XtcHandle) RenameChain(oldName, newName XtChainLabel) (result bool, o
 	return
 }
 
-/* Sets the policy on a built-in chain. */
-func (this XtcHandle) SetPolicy(chain XtChainLabel, policy XtChainLabel, counters XtCounters) (result bool, osErr error) {
+/* Sets the policy and (optionally) counters on a built-in chain. */
+func (this XtcHandle) SetPolicy(chain XtChainLabel, policy XtChainLabel, counters *XtCounters) (result bool, osErr error) {
 	osErr = relayCall(func() {
 		cChain := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cChain))
 		cPolicy := C.CString(string(policy))
 		defer C.free(unsafe.Pointer(cPolicy))
 
-		r := C.iptc_set_policy(cChain, cPolicy, &counters.counters, this.xtc_handle)
+		var c *_Ctype_struct_xt_counters
+		if counters != nil {
+			c = &_Ctype_struct_xt_counters{}
+			c.bcnt = C.__u64(counters.Bcnt)
+			c.pcnt = C.__u64(counters.Pcnt)
+		}
+
+		r := C.iptc_set_policy(cChain, cPolicy, c, this.xtc_handle)
 		if r == 1 {
 			result = true
 		} else if r == 0 {
@@ -473,7 +482,8 @@ func (this XtcHandle) ReadCounter(chain XtChainLabel, ruleNum uint) (result XtCo
 			// has an error
 			return
 		}
-		result.counters = *counters_handle
+		result.Bcnt = uint64(counters_handle.bcnt)
+		result.Pcnt = uint64(counters_handle.pcnt)
 	}, "iptc_read_counter")
 	return
 }
@@ -500,7 +510,11 @@ func (this XtcHandle) SetCounter(chain XtChainLabel, ruleNum uint, counters XtCo
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.iptc_set_counter(cStr, C.uint(ruleNum), &counters.counters, this.xtc_handle)
+		var c _Ctype_struct_xt_counters
+		c.bcnt = C.__u64(counters.Bcnt)
+		c.pcnt = C.__u64(counters.Pcnt)
+
+		r := C.iptc_set_counter(cStr, C.uint(ruleNum), &c, this.xtc_handle)
 		if r == 1 {
 			result = true
 		} else if r == 0 {
