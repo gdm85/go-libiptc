@@ -20,8 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "libiptc/libiptc.h"
 #include "iptables.h"
 
-const char *socket_error();
-
 int xtables_lock(bool wait);
+int xtables_unlock();
 
 const char *iptc_last_error();

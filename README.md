@@ -9,8 +9,6 @@ This project currently contains preliminary code for Go bindings to libip4tc/lib
 TODO
 ====
 
-* once API is fixed, move all actual calls into OS-locked thread, see also https://github.com/golang/go/wiki/LockOSThread
-* mechanism to release xtables lock
 * separate libip6tc package that uses '#cgo LDFLAGS: -lip6tc'
 * unit tests coverage
 * finally, some analysis of memory leakage

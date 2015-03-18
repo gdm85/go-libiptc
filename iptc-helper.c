@@ -34,6 +34,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define XT_SOCKET_NAME "xtables"
 #define XT_SOCKET_LEN 8
 
+int xtables_socket = -1;
+
 const char *iptc_last_error()
 {
 	if (errno == 0)
@@ -42,34 +44,45 @@ const char *iptc_last_error()
 	return iptc_strerror(errno);
 }
 
-const char *socket_error() {
-	return strerror(errno);
+int xtables_unlock() {
+	// lock was not being held at all
+	if (xtables_socket < 0)
+		return 1;
+	
+	if (close(xtables_socket) != 0)
+		return 1;
+	
+	return 0;
 }
 
 // <0 - lock failed, 0 - success, 1 - failure
 int xtables_lock(bool wait)
 {
-	int i = 0, ret, xt_socket;
+	int i = 0, ret;
 	struct sockaddr_un xt_addr;
 
 	memset(&xt_addr, 0, sizeof(xt_addr));
 	xt_addr.sun_family = AF_UNIX;
 	strcpy(xt_addr.sun_path+1, XT_SOCKET_NAME);
-	xt_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+	xtables_socket = socket(AF_UNIX, SOCK_STREAM, 0);
 	/* If we can't even create a socket, fall back to prior (lockless) behavior */
-	if (xt_socket < 0)
-		return xt_socket;
+	if (xtables_socket < 0)
+		return xtables_socket;
 
 	while (1) {
-		ret = bind(xt_socket, (struct sockaddr*)&xt_addr,
+		ret = bind(xtables_socket, (struct sockaddr*)&xt_addr,
 			   offsetof(struct sockaddr_un, sun_path)+XT_SOCKET_LEN);
+			   
+		// successfully acquired lock (via socket)
+		// NOTE: the socket is released with xtables_unlock(), or when process exits if it's never 
 		if (ret == 0)
 			return 0;
-		else if (wait == false)
+		
+		// fail immediately
+		if (wait == false)
 			return 1;
-		if (++i % 2 == 0)
-			fprintf(stderr, "Another app is currently holding the xtables lock; "
-				"waiting for it to exit...\n");
+
+		// time to wait
 		sleep(1);
 	}
 }
