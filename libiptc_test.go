@@ -21,14 +21,30 @@ package libiptc
 
 import (
 	"testing"
-	"fmt"
 )
 
 func TestInit(t *testing.T) {
-	handle := TableInit("filter")
-	
-	fmt.Printf("iptc_init = %v\n", handle)
-	fmt.Printf("iptc_last_error() = '%s'\n", LastError())
+	acquired, err := XtablesLock(false)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	if !acquired {
+		t.FailNow()
+	}
+	defer XtablesUnlock()
+
+	handle, err := TableInit("filter")
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	err = handle.Free()
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
 }
 
 func TestXtablesLock(t *testing.T) {
@@ -37,5 +53,24 @@ func TestXtablesLock(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	fmt.Printf("xtables_lock(false) = %v\n", acquired)
+	if !acquired {
+		t.FailNow()
+	}
+
+	released, err := XtablesUnlock()
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	released, err = XtablesUnlock()
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// should not succeed at releasing a lock twice
+	if released {
+		t.FailNow()
+	}
 }

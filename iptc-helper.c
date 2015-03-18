@@ -52,12 +52,18 @@ int xtables_unlock() {
 	if (close(xtables_socket) != 0)
 		return 1;
 	
+	xtables_socket = -1;
 	return 0;
 }
 
 // <0 - lock failed, 0 - success, 1 - failure
 int xtables_lock(bool wait)
 {
+	// trying to acquire lock twice
+	if (xtables_socket >= 0) {
+		return 1;
+	}
+
 	int i = 0, ret;
 	struct sockaddr_un xt_addr;
 
