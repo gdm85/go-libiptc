@@ -17,12 +17,31 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include "libiptc/libiptc.h"
-#include "iptables.h"
+package main
 
-void reset_errno();
+import (
+	"../.."
+	"fmt"
+	"os"
+	"time"
+)
 
-int xtables_lock(bool wait, uint max_seconds_wait);	
-int xtables_unlock();
+func main() {
+	acquired, err := libiptc.XtablesLock(false)
+	if err != nil {
+		panic(err)
+	}
+	if !acquired {
+		fmt.Fprintf(os.Stderr, "Could not acquire xtables lock!\n")
+		os.Exit(1)
+	}
+	defer func() {
+		_, err := libiptc.XtablesUnlock()
+		if err != nil {
+			panic(err)
+		}
+	}()
 
-const char *iptc_last_error();
+	fmt.Printf("I have acquired a lock for 5 seconds, try any 'iptables --wait' command\n")
+	time.Sleep(5 * time.Second)
+}

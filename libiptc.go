@@ -54,8 +54,11 @@ type IptEntry struct {
 	ipt_entry_handle *_Ctype_struct_ipt_entry
 }
 
+// a function that returns false if there is an 'errno' to query about
+type RelayedFunc func() bool
+
 type RelayedCall struct {
-	Func    func()
+	Func    func() bool
 	Context string
 }
 
@@ -68,160 +71,188 @@ func init() {
 	// start a main loop that will process (serially) all incoming libiptc calls
 	go func() {
 		runtime.LockOSThread()
+		//defer runtime.UnlockOSThread()
 
 		for call := range queueOfCalls {
-			// process all logic here
-			call.Func()
+			// as extra good measure, reset errno before C-land calls
+			C.reset_errno()
 
-			// get any errno error - this will also signal completion
-			//NOTE: will ignore libiptc's errno '0'
-			errMsg := C.GoString(C.iptc_last_error())
-			if len(errMsg) > 0 {
-				lastErrors <- fmt.Errorf("%s: %s", call.Context, errMsg)
-			} else {
-				lastErrors <- nil
+			// libiptc's logic is called here
+			success := call.Func()
+
+			var err error
+			if !success {
+				errMsg := C.GoString(C.iptc_last_error())
+				err = fmt.Errorf("%s: %s", call.Context, errMsg)
 			}
+
+			// this will also signal completion of the call
+			lastErrors <- err
 		}
 	}()
 }
 
-func relayCall(f func(), context string) error {
+func relayCall(f RelayedFunc, context string) error {
 	queueOfCalls <- RelayedCall{Func: f, Context: context}
 	return <-lastErrors
 }
 
 func (this XtcHandle) Free() error {
-	return relayCall(func() {
+	return relayCall(func() bool {
 		C.iptc_free(this.xtc_handle)
+		return true
 	}, "iptc_free")
 }
 
 func TableInit(tableName string) (result XtcHandle, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(tableName)
 		defer C.free(unsafe.Pointer(cStr))
 
-		result = XtcHandle{xtc_handle: C.iptc_init(cStr)}
+		h := C.iptc_init(cStr)
+		result = XtcHandle{xtc_handle: h}
+
+		return h != nil
 	}, "free")
 	return
 }
 
-func XtablesLock(wait bool) (result bool, osErr error) {
-	osErr = relayCall(func() {
-		r := C.xtables_lock(true)
+func XtablesLock(wait bool, maxSeconds uint) (result bool, osErr error) {
+	osErr = relayCall(func() bool {
+		r := C.xtables_lock(true, C.uint(maxSeconds))
 		if r == 0 {
 			result = true
+			return result
 		} else if r == 1 {
 			result = false
+			return result
 		}
+		panic("invalid return value")
 	}, "xtables_lock")
 	return
 }
 
 func XtablesUnlock() (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		r := C.xtables_unlock()
 		if r == 0 {
 			result = true
+			return result
 		} else if r == 1 {
 			result = false
+			return result
 		}
+		panic("invalid return value")
 	}, "xtables_lock")
 	return
 }
 
 func (this XtcHandle) IsChain(chain string) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_is_chain(cStr, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
-		panic("invalid return value from iptc_is_chain")
+		panic("invalid return value")
 	}, "iptc_is_chain")
 	return
 }
 
 func (this XtcHandle) IsBuiltin(chain string) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_builtin(cStr, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
-		panic("invalid return value from iptc_builtin")
+		panic("invalid return value")
 	}, "iptc_builtin")
 	return
 }
 
 /* Iterator functions to run through the chains.  Returns NULL at end. */
 func (this XtcHandle) FirstChain() (result string, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.iptc_first_chain(this.xtc_handle)
 		if cStr == nil {
 			result = ""
-		} else {
-			result = C.GoString(cStr)
+			return false
 		}
+
+		result = C.GoString(cStr)
+		return true
 	}, "iptc_first_chain")
 	return
 }
 
 func (this XtcHandle) NextChain() (result string, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.iptc_next_chain(this.xtc_handle)
 		if cStr == nil {
 			result = ""
-		} else {
-			result = C.GoString(cStr)
+			return false
 		}
+
+		result = C.GoString(cStr)
+		return true
 	}, "iptc_next_chain")
 	return
 }
 
 /* Get first rule in the given chain: NULL for empty chain. */
 func (this XtcHandle) FirstRule(chain string) (result IptEntry, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
 		result.ipt_entry_handle = C.iptc_first_rule(cStr, this.xtc_handle)
+
+		return result.ipt_entry_handle != nil
 	}, "iptc_first_rule")
 	return
 }
 
 /* Returns NULL when rules run out. */
 func (this XtcHandle) NextRule(previous IptEntry) (result IptEntry, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		result.ipt_entry_handle = C.iptc_next_rule(previous.ipt_entry_handle, this.xtc_handle)
+
+		return result.ipt_entry_handle != nil
 	}, "iptc_next_rule")
 	return
 }
 
 /* Returns a pointer to the target name of this entry. */
 func (this XtcHandle) GetTarget(entry IptEntry) (result string, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.iptc_get_target(entry.ipt_entry_handle, this.xtc_handle)
 		if cStr == nil {
 			result = ""
-		} else {
-			result = C.GoString(cStr)
+			return false
 		}
+
+		result = C.GoString(cStr)
+		return true
 	}, "iptc_get_target")
 	return
 }
 
 /* Get the policy of a given built-in chain */
 func (this XtcHandle) GetPolicy(chain string) (policy string, counters XtCounters, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
@@ -230,11 +261,13 @@ func (this XtcHandle) GetPolicy(chain string) (policy string, counters XtCounter
 		if cStr == nil {
 			// no chains
 			policy = ""
-		} else {
-			policy = C.GoString(cStr)
-			counters.Bcnt = uint64(c.bcnt)
-			counters.Pcnt = uint64(c.pcnt)
+			return false
 		}
+
+		policy = C.GoString(cStr)
+		counters.Bcnt = uint64(c.bcnt)
+		counters.Pcnt = uint64(c.pcnt)
+		return true
 	}, "iptc_get_policy")
 	return
 }
@@ -245,19 +278,19 @@ func (this XtcHandle) GetPolicy(chain string) (policy string, counters XtCounter
 
 /* Insert the entry `e' in chain `chain' into position `rulenum'. */
 func (this XtcHandle) InsertEntry(chain XtChainLabel, entry IptEntry, ruleNum uint) error {
-	osErr := relayCall(func() {
+	osErr := relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_insert_entry(cStr, entry.ipt_entry_handle, C.uint(ruleNum), this.xtc_handle)
 		if r == 1 {
-			return
+			return true
 		} else if r == 0 {
 			// has error
-			return
+			return false
 		}
 
-		panic("invalid return value from iptc_insert_entry")
+		panic("invalid return value")
 	}, "iptc_insert_entry")
 
 	return osErr
@@ -266,19 +299,19 @@ func (this XtcHandle) InsertEntry(chain XtChainLabel, entry IptEntry, ruleNum ui
 /* Append entry `e' to chain `chain'.  Equivalent to insert with
    rulenum = length of chain. */
 func (this XtcHandle) AppendEntry(chain XtChainLabel, entry IptEntry) error {
-	osErr := relayCall(func() {
+	osErr := relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_append_entry(cStr, entry.ipt_entry_handle, this.xtc_handle)
 		if r == 1 {
-			return
+			return true
 		} else if r == 0 {
 			// has error
-			return
+			return false
 		}
 
-		panic("invalid return value from iptc_insert_entry")
+		panic("invalid return value")
 	}, "iptc_append_entry")
 
 	return osErr
@@ -286,7 +319,7 @@ func (this XtcHandle) AppendEntry(chain XtChainLabel, entry IptEntry) error {
 
 /* Check whether a matching rule exists */
 func (this XtcHandle) CheckEntry(chain XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 		cMask := (*C.uchar)(unsafe.Pointer(&matchMask[0]))
@@ -294,9 +327,13 @@ func (this XtcHandle) CheckEntry(chain XtChainLabel, origfw IptEntry, matchMask 
 		r := C.iptc_check_entry(cStr, origfw.ipt_entry_handle, cMask, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_check_entry")
 	return
 }
@@ -304,7 +341,7 @@ func (this XtcHandle) CheckEntry(chain XtChainLabel, origfw IptEntry, matchMask 
 /* Delete the first rule in `chain' which matches `e', subject to
    matchmask (array of length == origfw) */
 func (this XtcHandle) DeleteEntry(chain XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 		cMask := (*C.uchar)(unsafe.Pointer(&matchMask[0]))
@@ -312,25 +349,33 @@ func (this XtcHandle) DeleteEntry(chain XtChainLabel, origfw IptEntry, matchMask
 		r := C.iptc_delete_entry(cStr, origfw.ipt_entry_handle, cMask, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_delete_entry")
 	return
 }
 
 /* Delete the rule in position `rulenum' in `chain'. */
 func (this XtcHandle) DeleteNumEntry(chain XtChainLabel, ruleNum uint) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_delete_num_entry(cStr, C.uint(ruleNum), this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_delete_num_entry")
 	return
 }
@@ -343,71 +388,87 @@ func (this XtcHandle) DeleteNumEntry(chain XtChainLabel, ruleNum uint) (result b
 
 /* Flushes the entries in the given chain (ie. empties chain). */
 func (this XtcHandle) FlushEntries(chain XtChainLabel) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_flush_entries(cStr, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_flush_entries")
 	return
 }
 
 /* Zeroes the counters in a chain. */
 func (this XtcHandle) ZeroEntries(chain XtChainLabel) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_zero_entries(cStr, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_zero_entries")
 	return
 }
 
 /* Creates a new chain. */
 func (this XtcHandle) CreateChain(chain XtChainLabel) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_create_chain(cStr, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_create_chain")
 	return
 }
 
 /* Deletes a chain. */
 func (this XtcHandle) DeleteChain(chain XtChainLabel) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_delete_chain(cStr, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_delete_chain")
 	return
 }
 
 /* Renames a chain. */
 func (this XtcHandle) RenameChain(oldName, newName XtChainLabel) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cOldName := C.CString(string(oldName))
 		defer C.free(unsafe.Pointer(cOldName))
 		cNewName := C.CString(string(newName))
@@ -416,16 +477,20 @@ func (this XtcHandle) RenameChain(oldName, newName XtChainLabel) (result bool, o
 		r := C.iptc_rename_chain(cOldName, cNewName, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_rename_chain")
 	return
 }
 
 /* Sets the policy and (optionally) counters on a built-in chain. */
 func (this XtcHandle) SetPolicy(chain XtChainLabel, policy XtChainLabel, counters *XtCounters) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cChain := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cChain))
 		cPolicy := C.CString(string(policy))
@@ -441,16 +506,20 @@ func (this XtcHandle) SetPolicy(chain XtChainLabel, policy XtChainLabel, counter
 		r := C.iptc_set_policy(cChain, cPolicy, c, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_set_policy")
 	return
 }
 
 /* Get the number of references to this chain */
 func (this XtcHandle) GetReferences(chain XtChainLabel) (result uint, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
@@ -460,53 +529,59 @@ func (this XtcHandle) GetReferences(chain XtChainLabel) (result uint, osErr erro
 		if r == 1 {
 			// has a valid result
 			result = uint(i)
-			return
+			return true
 		} else if r == 0 {
 			// has an error
-			return
+			return false
 		}
 
-		panic("invalid return value from iptc_get_references")
+		panic("invalid return value")
 	}, "iptc_get_references")
 	return
 }
 
 /* read packet and byte counters for a specific rule */
 func (this XtcHandle) ReadCounter(chain XtChainLabel, ruleNum uint) (result XtCounters, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		counters_handle := C.iptc_read_counter(cStr, C.uint(ruleNum), this.xtc_handle)
 		if counters_handle == nil {
 			// has an error
-			return
+			return false
 		}
+
 		result.Bcnt = uint64(counters_handle.bcnt)
 		result.Pcnt = uint64(counters_handle.pcnt)
+		return true
 	}, "iptc_read_counter")
 	return
 }
 
 /* zero packet and byte counters for a specific rule */
 func (this XtcHandle) ZeroCounter(chain XtChainLabel, ruleNum uint) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		r := C.iptc_zero_counter(cStr, C.uint(ruleNum), this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_read_counter")
 	return
 }
 
 /* set packet and byte counters for a specific rule */
 func (this XtcHandle) SetCounter(chain XtChainLabel, ruleNum uint, counters XtCounters) (result bool, osErr error) {
-	osErr = relayCall(func() {
+	osErr = relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
@@ -517,31 +592,27 @@ func (this XtcHandle) SetCounter(chain XtChainLabel, ruleNum uint, counters XtCo
 		r := C.iptc_set_counter(cStr, C.uint(ruleNum), &c, this.xtc_handle)
 		if r == 1 {
 			result = true
+			return result
 		} else if r == 0 {
 			result = false
+			return result
 		}
+
+		panic("invalid return value")
 	}, "iptc_set_counter")
 	return
 }
 
 /* Makes the actual changes. */
-func (this XtcHandle) Commit() (bool, error) {
-	var result bool
-	var err error
-
-	relayCall(func() {
+func (this XtcHandle) Commit() error {
+	return relayCall(func() bool {
 		r := C.iptc_commit(this.xtc_handle)
 		if r == 1 {
-			// nothing was changed
-			result = false
-			return
+			return true
 		} else if r == 0 {
-			result = true
-			return
+			return false
 		}
 
 		panic("unexpected return value")
 	}, "iptc_commit")
-
-	return result, err
 }
