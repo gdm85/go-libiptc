@@ -27,7 +27,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "Usage: dump-chain <table-name>\n")
+		fmt.Fprintf(os.Stderr, "Usage: dump-table <table-name>\n")
 		os.Exit(1)
 	}
 
@@ -36,7 +36,7 @@ func main() {
 		panic(err)
 	}
 	if !acquired {
-		fmt.Fprintf(os.Stderr, "dump-chain: could not acquire xtables lock!\n")
+		fmt.Fprintf(os.Stderr, "dump-table: could not acquire xtables lock!\n")
 		os.Exit(1)
 	}
 	defer func() {
@@ -50,7 +50,7 @@ func main() {
 
 	table, err := libiptc.TableInit(tableName)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "dump-chain: %s\n", err)
+		fmt.Fprintf(os.Stderr, "dump-table: %s\n", err)
 		os.Exit(3)
 	}
 	defer table.Free()
