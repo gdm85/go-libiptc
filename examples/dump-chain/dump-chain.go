@@ -23,16 +23,20 @@ import (
 	"../.."
 	"fmt"
 	"os"
-	"time"
 )
 
 func main() {
+	if len(os.Args) != 2 {
+		fmt.Fprintf(os.Stderr, "Usage: dump-chain <table-name>\n")
+		os.Exit(1)
+	}
+
 	acquired, err := libiptc.XtablesLock(false, 0)
 	if err != nil {
 		panic(err)
 	}
 	if !acquired {
-		fmt.Fprintf(os.Stderr, "Could not acquire xtables lock!\n")
+		fmt.Fprintf(os.Stderr, "dump-chain: could not acquire xtables lock!\n")
 		os.Exit(1)
 	}
 	defer func() {
@@ -42,6 +46,15 @@ func main() {
 		}
 	}()
 
-	fmt.Printf("I have acquired a lock for 5 seconds, try any 'iptables --wait' command\n")
-	time.Sleep(5 * time.Second)
+	tableName := os.Args[1]
+
+	table, err := libiptc.TableInit(tableName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dump-chain: %s\n", err)
+		os.Exit(3)
+	}
+	defer table.Free()
+
+	// use the native/undocumented DumpEntries() anyways
+	table.DumpEntries()
 }

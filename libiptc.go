@@ -82,8 +82,7 @@ func init() {
 
 			var err error
 			if !success {
-				errMsg := C.GoString(C.iptc_last_error())
-				err = fmt.Errorf("%s: %s", call.Context, errMsg)
+				err = fmt.Errorf("%s: %s", call.Context, C.GoString(C.iptc_last_error()))
 			}
 
 			// this will also signal completion of the call
@@ -102,6 +101,10 @@ func (this XtcHandle) Free() error {
 		C.iptc_free(this.xtc_handle)
 		return true
 	}, "iptc_free")
+}
+
+func (this IptEntry) IsEmpty() bool {
+	return this.ipt_entry_handle == nil
 }
 
 func TableInit(tableName string) (result XtcHandle, osErr error) {
@@ -220,7 +223,12 @@ func (this XtcHandle) FirstRule(chain string) (result IptEntry, osErr error) {
 
 		result.ipt_entry_handle = C.iptc_first_rule(cStr, this.xtc_handle)
 
-		return result.ipt_entry_handle != nil
+		if result.ipt_entry_handle == nil && C.has_errno() > 0 {
+			// there's some error
+			return false
+		}
+
+		return true
 	}, "iptc_first_rule")
 	return
 }
@@ -230,7 +238,12 @@ func (this XtcHandle) NextRule(previous IptEntry) (result IptEntry, osErr error)
 	osErr = relayCall(func() bool {
 		result.ipt_entry_handle = C.iptc_next_rule(previous.ipt_entry_handle, this.xtc_handle)
 
-		return result.ipt_entry_handle != nil
+		if result.ipt_entry_handle == nil && C.has_errno() > 0 {
+			// there's some error
+			return false
+		}
+
+		return true
 	}, "iptc_next_rule")
 	return
 }
@@ -278,7 +291,7 @@ func (this XtcHandle) GetPolicy(chain string) (policy string, counters XtCounter
 
 /* Insert the entry `e' in chain `chain' into position `rulenum'. */
 func (this XtcHandle) InsertEntry(chain XtChainLabel, entry IptEntry, ruleNum uint) error {
-	osErr := relayCall(func() bool {
+	return relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
@@ -292,14 +305,12 @@ func (this XtcHandle) InsertEntry(chain XtChainLabel, entry IptEntry, ruleNum ui
 
 		panic("invalid return value")
 	}, "iptc_insert_entry")
-
-	return osErr
 }
 
 /* Append entry `e' to chain `chain'.  Equivalent to insert with
    rulenum = length of chain. */
 func (this XtcHandle) AppendEntry(chain XtChainLabel, entry IptEntry) error {
-	osErr := relayCall(func() bool {
+	return relayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
@@ -313,8 +324,6 @@ func (this XtcHandle) AppendEntry(chain XtChainLabel, entry IptEntry) error {
 
 		panic("invalid return value")
 	}, "iptc_append_entry")
-
-	return osErr
 }
 
 /* Check whether a matching rule exists */
@@ -615,4 +624,11 @@ func (this XtcHandle) Commit() error {
 
 		panic("unexpected return value")
 	}, "iptc_commit")
+}
+
+func (this XtcHandle) DumpEntries() error {
+	return relayCall(func() bool {
+		C.dump_entries(this.xtc_handle)
+		return false
+	}, "dump_entries")
 }

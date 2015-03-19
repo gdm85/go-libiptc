@@ -40,6 +40,12 @@ void reset_errno() {
 	errno = 0;
 }
 
+// some functions inconsistently report about an erroneous condition through their result,
+// thus error checking is peeked with this helper function
+int has_errno() {
+	return errno != 0;
+}
+
 const char *iptc_last_error()
 {
 	return iptc_strerror(errno);
