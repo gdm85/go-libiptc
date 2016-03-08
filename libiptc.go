@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 package libiptc
 
 // #cgo LDFLAGS: -liptc -lip4tc
+// #include <arpa/inet.h>
 // #include <stdlib.h>
 // #include <libiptc/libiptc.h>
 // #include <xtables.h>
@@ -28,6 +29,7 @@ import "C"
 
 import (
 	"fmt"
+	"net"
 	"runtime"
 	"unsafe"
 )
@@ -51,6 +53,86 @@ type XtCounters struct {
 
 type IptEntry struct {
 	ipt_entry_handle *_Ctype_struct_ipt_entry
+}
+type Not bool
+
+func (n Not) String() string {
+	if n {
+		return "!"
+	}
+	return " "
+}
+
+type Rule struct {
+	Src    *net.IPNet
+	Dest   *net.IPNet
+	InDev  string
+	OutDev string
+	Not    struct {
+		Src    Not
+		Dest   Not
+		InDev  Not
+		OutDev Not
+	}
+	Target string
+	XtCounters
+}
+
+func (r Rule) String() string {
+	return fmt.Sprintf("in: %s%s, out: %s%s, %s%s -> %s%s -> %s: %d packets, %d bytes",
+		r.Not.InDev, r.InDev,
+		r.Not.OutDev, r.OutDev,
+		r.Not.Src, r.Src,
+		r.Not.Dest, r.Dest,
+		r.Target,
+		r.Pcnt, r.Bcnt)
+}
+
+func cuint2ip(cAaddr, cMask C.in_addr_t) *net.IPNet {
+	addr := uint32(cAaddr)
+	ip := new(net.IPNet)
+	ip.IP = net.IPv4(byte(addr&0xff),
+		byte((addr>>8)&0xff),
+		byte((addr>>16)&0xff),
+		byte((addr>>24)&0xff))
+	mask := uint32(cMask)
+	ip.Mask = net.IPv4Mask(byte(mask&0xff),
+		byte((mask>>8)&0xff),
+		byte((mask>>16)&0xff),
+		byte((mask>>24)&0xff),
+	)
+	return ip
+}
+
+func (h *XtcHandle) IptEntry2Rule(e *IptEntry) *Rule {
+	entry := e.ipt_entry_handle
+	rule := new(Rule)
+	rule.Pcnt = uint64(entry.counters.pcnt)
+	rule.Bcnt = uint64(entry.counters.bcnt)
+	rule.InDev = C.GoString(&entry.ip.iniface[0])
+	rule.OutDev = C.GoString(&entry.ip.outiface[0])
+	if entry.ip.invflags&C.IPT_INV_VIA_IN != 0 {
+		rule.Not.InDev = true
+	}
+	if entry.ip.invflags&C.IPT_INV_VIA_OUT != 0 {
+		rule.Not.OutDev = true
+	}
+
+	rule.Src = cuint2ip(entry.ip.src.s_addr, entry.ip.smsk.s_addr)
+	if entry.ip.invflags&C.IPT_INV_SRCIP != 0 {
+		rule.Not.Src = true
+	}
+
+	rule.Dest = cuint2ip(entry.ip.dst.s_addr, entry.ip.dmsk.s_addr)
+	if entry.ip.invflags&C.IPT_INV_DSTIP != 0 {
+		rule.Not.Dest = true
+	}
+
+	target := C.iptc_get_target(entry, h.xtc_handle)
+	if target != nil {
+		rule.Target = C.GoString(target)
+	}
+	return rule
 }
 
 // a function that returns false if there is an 'errno' to query about
