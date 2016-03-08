@@ -19,11 +19,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 package libiptc
 
-// #cgo CFLAGS: -I iptables/include
-// #cgo LDFLAGS: -lip4tc
+// #cgo LDFLAGS: -liptc -lip4tc -lip6tc
 // #include <stdlib.h>
-// #include "libiptc/libiptc.h"
-// #include "iptables.h"
+// #include <libiptc/libiptc.h>
+// #include <xtables.h>
 // #include "iptc-helper.h"
 import "C"
 

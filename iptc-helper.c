@@ -28,6 +28,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <stddef.h>
+#include <unistd.h>
 
 #include "iptc-helper.h"
 
