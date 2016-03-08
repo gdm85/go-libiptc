@@ -1,6 +1,6 @@
 /*
- * go-libiptc v0.1.0 - libiptc bindings for Go language
- * Copyright (C) 2015 gdm85 - https://github.com/gdm85/go-libiptc/
+ * go-libiptc v0.2.0 - libiptc bindings for Go language
+ * Copyright (C) 2015~2016 gdm85 - https://github.com/gdm85/go-libiptc/
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -23,5 +23,5 @@ int has_errno();
 void reset_errno();
 const char *iptc_last_error();
 
-int xtables_lock(bool wait, uint max_seconds_wait);	
+int xtables_lock(bool wait, uint max_seconds_wait);
 int xtables_unlock();

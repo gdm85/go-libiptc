@@ -1,6 +1,6 @@
 /*
- * go-libiptc v0.1.0 - libiptc bindings for Go language
- * Copyright (C) 2015 gdm85 - https://github.com/gdm85/go-libiptc/
+ * go-libiptc v0.2.0 - libiptc bindings for Go language
+ * Copyright (C) 2015~2016 gdm85 - https://github.com/gdm85/go-libiptc/
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -59,10 +59,10 @@ int xtables_unlock() {
 		errno = ENOLCK;
 		return 1;
 	}
-	
+
 	if (close(xtables_socket) != 0)
 		return 1;
-	
+
 	xtables_socket = -1;
 	return 0;
 }
@@ -92,7 +92,7 @@ int xtables_lock(bool wait, uint max_seconds_wait)
 			   offsetof(struct sockaddr_un, sun_path)+XT_SOCKET_LEN);
 
 		// successfully acquired lock (via socket)
-		// NOTE: the socket is released with xtables_unlock(), or when process exits if it's never 
+		// NOTE: the socket is released with xtables_unlock(), or anyway when process exits
 		if (ret == 0)
 			return 0;
 
