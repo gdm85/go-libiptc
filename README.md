@@ -8,14 +8,16 @@ This project currently contains preliminary code for Go bindings to libip4tc/lib
 
 Please note that there is no public/stable C/C++ API for libiptc, quoting from official [Netfilter FAQs](http://www.netfilter.org/documentation/FAQ/netfilter-faq-4.html#ss4.5):
 
-  4.5 Is there an C/C++ API for adding/removing rules?
-  
-  The answer unfortunately is: No.
-  
-  Now you might think 'but what about libiptc?'. As has been pointed out numerous times on the mailinglist(s), libiptc was _NEVER_ meant to be used as a public interface. We don't guarantee a stable interface, and it is planned to remove it in the next incarnation of linux packet filtering. libiptc is way too low-layer to be used reasonably anyway.
-  
-  We are well aware that there is a fundamental lack for such an API, and we are working on improving that situation. Until then, it is recommended to either use system() or open a pipe into stdin of iptables-restore. The latter will give you a way better performance.
-  
+> 4.5 Is there an C/C++ API for adding/removing rules?
+> 
+> The answer unfortunately is: No.
+> 
+> Now you might think 'but what about libiptc?'. As has been pointed out numerous times on the mailinglist(s), libiptc was _NEVER_ meant to be used as a public interface. We don't guarantee a stable interface, and it is planned to remove it in the next incarnation of linux packet filtering. libiptc is way too low-layer to be used reasonably anyway.
+> 
+> We are well aware that there is a fundamental lack for such an API, and we are working on improving that situation. Until then, it is recommended to either use system() or open a pipe into stdin of iptables-restore. The latter will give you a way better performance.
+>
+
+This Go package uses iptables headers; on Debian/Ubuntu systems they are provided by `iptables-dev` package.
 
 TODO
 ====
