@@ -1,5 +1,4 @@
-libiptc Go bindings
-===================
+# libiptc Go bindings
 
 [libiptc](http://www.tldp.org/HOWTO/Querying-libiptc-HOWTO/whatis.html) bindings for Go language.
 Object-oriented design, support for IPv6 (libip6tc) and same wait locking mechanism as iptables/ip6tables official binaries.
@@ -17,21 +16,30 @@ Please note that there is no public/stable C/C++ API for libiptc, quoting from o
 > We are well aware that there is a fundamental lack for such an API, and we are working on improving that situation. Until then, it is recommended to either use system() or open a pipe into stdin of iptables-restore. The latter will give you a way better performance.
 >
 
-This Go package uses iptables headers; on Debian/Ubuntu systems they are provided by `iptables-dev` package.
+# Building
 
-TODO
-====
+In order to build this package it is necessary for it to reside within a proper GOPATH and that iptables headers are globally available on the system; on Debian/Ubuntu systems these are provided by `iptables-dev` package, otherwise you can refer to the official upstream iptables git repository: `git://git.netfilter.org/iptables.git`.
+
+To build the package it will suffice a:
+```
+go build
+```
+
+To run tests (with proper root privileges):
+```
+go test
+```
+
+# TODO
 
 * separate libip6tc package that uses '#cgo LDFLAGS: -lip6tc'
 * unit tests coverage
 * finally, some analysis of memory leakage
 
-Interesting links
-=================
+# Useful resources
 
 * http://www.bani.com.br/2012/05/programmatically-managing-iptables-rules-in-c-iptc/
 
-License
-=======
+# License
 
 Licensed under [GNU/GPL v2](LICENSE).
