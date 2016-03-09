@@ -22,12 +22,17 @@ In order to build this package it is necessary for it to reside within a proper 
 
 To build the package it will suffice a:
 ```
-go build
+make build
 ```
 
 To run tests (with proper root privileges):
 ```
-go test
+make test
+```
+
+To build the examples:
+```
+make examples
 ```
 
 # TODO

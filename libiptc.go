@@ -54,6 +54,7 @@ type XtCounters struct {
 type IptEntry struct {
 	ipt_entry_handle *_Ctype_struct_ipt_entry
 }
+
 type Not bool
 
 func (n Not) String() string {
@@ -273,7 +274,7 @@ func (this XtcHandle) FirstChain() (result string, osErr error) {
 		cStr := C.iptc_first_chain(this.xtc_handle)
 		if cStr == nil {
 			result = ""
-			return false
+			return C.has_errno() == 0
 		}
 
 		result = C.GoString(cStr)
@@ -287,7 +288,7 @@ func (this XtcHandle) NextChain() (result string, osErr error) {
 		cStr := C.iptc_next_chain(this.xtc_handle)
 		if cStr == nil {
 			result = ""
-			return false
+			return C.has_errno() == 0
 		}
 
 		result = C.GoString(cStr)
@@ -304,7 +305,7 @@ func (this XtcHandle) FirstRule(chain string) (result IptEntry, osErr error) {
 
 		result.ipt_entry_handle = C.iptc_first_rule(cStr, this.xtc_handle)
 
-		if result.ipt_entry_handle == nil && C.has_errno() > 0 {
+		if result.ipt_entry_handle == nil && C.has_errno() != 0 {
 			// there's some error
 			return false
 		}
@@ -319,7 +320,7 @@ func (this XtcHandle) NextRule(previous IptEntry) (result IptEntry, osErr error)
 	osErr = relayCall(func() bool {
 		result.ipt_entry_handle = C.iptc_next_rule(previous.ipt_entry_handle, this.xtc_handle)
 
-		if result.ipt_entry_handle == nil && C.has_errno() > 0 {
+		if result.ipt_entry_handle == nil && C.has_errno() != 0 {
 			// there's some error
 			return false
 		}
