@@ -90,10 +90,14 @@ func (r Rule) String() string {
 		r.Pcnt, r.Bcnt)
 }
 
-func cuint2ip(cAaddr, cMask C.struct_in6_addr) *net.IPNet {
+func cin6addr2ip(cAaddr, cMask C.struct_in6_addr) *net.IPNet {
 	ip := new(net.IPNet)
+
+	ip.IP = make(net.IP, 16)
 	copy(ip.IP, cAaddr.__in6_u[:])
+	ip.Mask = make(net.IPMask, 16)
 	copy(ip.Mask, cMask.__in6_u[:])
+
 	return ip
 }
 
@@ -111,12 +115,12 @@ func (h *XtcHandle) Ip6tEntry2Rule(e *Ip6tEntry) *Rule {
 		rule.Not.OutDev = true
 	}
 
-	rule.Src = cuint2ip(entry.ipv6.src, entry.ipv6.smsk)
+	rule.Src = cin6addr2ip(entry.ipv6.src, entry.ipv6.smsk)
 	if entry.ipv6.invflags&C.IP6T_INV_SRCIP != 0 {
 		rule.Not.Src = true
 	}
 
-	rule.Dest = cuint2ip(entry.ipv6.dst, entry.ipv6.dmsk)
+	rule.Dest = cin6addr2ip(entry.ipv6.dst, entry.ipv6.dmsk)
 	if entry.ipv6.invflags&C.IP6T_INV_DSTIP != 0 {
 		rule.Not.Dest = true
 	}
@@ -360,7 +364,7 @@ func (this XtcHandle) GetPolicy(chain string) (policy string, counters XtCounter
 }
 
 /* These functions return TRUE for OK or 0 and set errno.  If errno ==
-   0, it means there was a version error (ie. upgrade libip6tc). */
+   0, it means there was a version error (ie. upgrade libiptc). */
 /* Rule numbers start at 1 for the first rule. */
 
 /* Insert the entry `e' in chain `chain' into position `rulenum'. */
