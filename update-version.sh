@@ -7,4 +7,4 @@ fi
 
 VER="$1"
 
-sed -i "s~go-libiptc v[^ ]*~go-libiptc v${VER}~g" $(find . -name '*.go' -type f)
+sed -i "s~go-libiptc v[^ ]*~go-libiptc v${VER}~g" $(find . -type f -name '*.go' -o -name '*.c' -o -name '*.h')

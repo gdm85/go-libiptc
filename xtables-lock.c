@@ -1,5 +1,5 @@
 /*
- * go-libiptc v0.2.0 - libiptc bindings for Go language
+ * go-libiptc v0.3.0 - libiptc bindings for Go language
  * Copyright (C) 2015~2016 gdm85 - https://github.com/gdm85/go-libiptc/
 
 This program is free software; you can redistribute it and/or
@@ -38,7 +38,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 int xtables_socket = -1;
 
-// it's not possible to access errno directly in Go
+// it's not possible to read or write errno directly in Go
 void reset_errno() {
 	errno = 0;
 }
@@ -46,6 +46,7 @@ void reset_errno() {
 // some functions inconsistently report about an erroneous condition through their result,
 // thus error checking is peeked with this helper function
 // see also: https://www.securecoding.cert.org/confluence/pages/viewpage.action?pageId=6619179
+// NOTE: there is a PR upstream about improving error handling in iptables
 int get_errno() {
 	return errno;
 }

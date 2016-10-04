@@ -1,5 +1,5 @@
 /*
- * go-libiptc v0.2.0 - libiptc bindings for Go language
+ * go-libiptc v0.3.0 - libiptc bindings for Go language
  * Copyright (C) 2015~2016 gdm85 - https://github.com/gdm85/go-libiptc/
 
 This program is free software; you can redistribute it and/or
@@ -17,7 +17,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-// this header needs to be here so that Go will import the externs
+// these headers needs to be here so that Go will import the externs
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
