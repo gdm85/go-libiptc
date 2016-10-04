@@ -1,7 +1,8 @@
-all: build test examples
+all: build examples
 
 build:
 	go build
+	cd ipv6 && go build
 
 test:
 	go test
