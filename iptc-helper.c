@@ -50,7 +50,7 @@ int has_errno() {
 
 const char *iptc_last_error()
 {
-	return iptc_strerror(errno);
+	return ip6tc_strerror(errno);
 }
 
 int xtables_unlock() {

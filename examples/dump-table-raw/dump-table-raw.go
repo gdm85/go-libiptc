@@ -21,7 +21,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/gdm85/go-libiptc"
+	"github.com/bstevant/go-libiptc"
 	"os"
 )
 
