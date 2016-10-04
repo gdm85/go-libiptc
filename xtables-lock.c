@@ -17,7 +17,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <stdbool.h>
+#include <libiptc/libiptc.h>
 #include <getopt.h>
 #include <sys/errno.h>
 #include <stdio.h>
@@ -30,27 +30,26 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <sys/un.h>
 #include <stddef.h>
 #include <unistd.h>
+#include <arpa/inet.h>
+#include <xtables.h>
 
-#include "iptc-helper.h"
+#include "xtables-lock.h"
 
 #define XT_SOCKET_NAME "xtables"
 #define XT_SOCKET_LEN 8
 
 int xtables_socket = -1;
 
+// it's not possible to access errno directly in Go
 void reset_errno() {
 	errno = 0;
 }
 
 // some functions inconsistently report about an erroneous condition through their result,
 // thus error checking is peeked with this helper function
-int has_errno() {
-	return errno != 0;
-}
-
-const char *iptc_last_error()
-{
-	return ip6tc_strerror(errno);
+// see also: https://www.securecoding.cert.org/confluence/pages/viewpage.action?pageId=6619179
+int get_errno() {
+	return errno;
 }
 
 int xtables_unlock() {

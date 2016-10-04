@@ -17,11 +17,13 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <libiptc/libip6tc.h>
+// this header needs to be here so that Go will import the externs
+#include <libiptc/libiptc.h>
+#include <stdbool.h>
+#include <stdlib.h>
 
-int has_errno();
+int get_errno();
 void reset_errno();
-const char *iptc_last_error();
 
 int xtables_lock(bool wait, uint max_seconds_wait);
 int xtables_unlock();

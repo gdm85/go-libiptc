@@ -1,6 +1,6 @@
 /*
  * go-libiptc v0.2.1 - libiptc bindings for Go language
- * Copyright (C) 2015 gdm85 - https://github.com/gdm85/go-libiptc/
+ * Copyright (C) 2015~2016 gdm85 - https://github.com/gdm85/go-libiptc/
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -17,44 +17,61 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-package main
+package libiptc
 
 import (
 	"fmt"
-	"github.com/gdm85/go-libiptc"
-	"os"
+	"testing"
 )
 
-func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "Usage: dump-table-raw <table-name>\n")
-		os.Exit(1)
-	}
-
-	acquired, err := libiptc.XtablesLock(false, 0)
+func TestXtablesLock(t *testing.T) {
+	acquired, err := XtablesLock(false, 0)
 	if err != nil {
-		panic(err)
+		t.Error(err)
+		t.FailNow()
 	}
 	if !acquired {
-		fmt.Fprintf(os.Stderr, "dump-table-raw: could not acquire xtables lock!\n")
-		os.Exit(1)
+		t.FailNow()
+	}
+
+	released, err := XtablesUnlock()
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	released, err = XtablesUnlock()
+	if err == nil || released {
+		t.Error(fmt.Errorf("unlocking twice succeeded!"))
+		t.FailNow()
+	}
+}
+
+func TestInit(t *testing.T) {
+	acquired, err := XtablesLock(false, 0)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	if !acquired {
+		t.FailNow()
 	}
 	defer func() {
-		_, err := libiptc.XtablesUnlock()
+		_, err := XtablesUnlock()
 		if err != nil {
 			panic(err)
 		}
 	}()
 
-	tableName := os.Args[1]
-
-	table, err := libiptc.TableInit(tableName)
+	handle, err := TableInit("filter")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "dump-table-raw: %s\n", err)
-		os.Exit(3)
+		t.Error(err)
+		t.FailNow()
 	}
-	defer table.Free()
 
-	// use the native/undocumented DumpEntries() anyways
-	table.DumpEntries()
+	err = handle.Free()
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
 }
