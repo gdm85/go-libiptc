@@ -16,9 +16,25 @@ Please note that there is no public/stable C/C++ API for libiptc, quoting from o
 > We are well aware that there is a fundamental lack for such an API, and we are working on improving that situation. Until then, it is recommended to either use system() or open a pipe into stdin of iptables-restore. The latter will give you a way better performance.
 >
 
+# How to use
+
+Install the dependency with `go get` or your dependency system of choice.
+```
+go get github.com/gdm85/go-libiptc
+```
+
+You can use xtables locking features by importing `github.com/gdm85/go-libiptc` and IPv4/IPv6 features by importing either `github.com/gdm85/go-libiptc/ipv4` or `github.com/gdm85/go-libiptc/ipv6`.
+
+Once the package is imported and being used, the OS thread is locked to a specific background goroutine and all calls are performed serially through such goroutine.
+
 # Building
 
 In order to build this package it is necessary for it to reside within a proper GOPATH and that iptables headers are globally available on the system; on Debian/Ubuntu systems these are provided by `iptables-dev` package, otherwise you can refer to the official upstream iptables git repository: `git://git.netfilter.org/iptables.git`.
+
+To build everything (except tests):
+```
+make
+```
 
 To build the package it will suffice a:
 ```
@@ -37,7 +53,7 @@ make examples
 
 # TODO
 
-* separate libip6tc package that uses '#cgo LDFLAGS: -lip6tc'
+* ~~separate libip6tc package that uses '#cgo LDFLAGS: -lip6tc'~~
 * unit tests coverage
 * finally, some analysis of memory leakage
 
