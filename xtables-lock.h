@@ -18,9 +18,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
 // this header needs to be here so that Go will import the externs
-#include <libiptc/libiptc.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 int get_errno();
 void reset_errno();

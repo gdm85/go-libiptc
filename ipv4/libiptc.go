@@ -1,6 +1,6 @@
 /*
- * go-libip6tc v0.2.1 - libip6tc bindings for Go language
- * Copyright (C) 2015~2016 gdm85 - https://github.com/gdm85/go-libip6tc/
+ * go-libiptc v0.2.1 - libiptc bindings for Go language
+ * Copyright (C) 2015~2016 gdm85 - https://github.com/gdm85/go-libiptc/
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -19,61 +19,67 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 package libiptc
 
+// #cgo LDFLAGS: -lip4tc
+// #include <libiptc/libiptc.h>
+// #include <stdlib.h>
+import "C"
+
 import (
-	// #cgo LDFLAGS: -lip6tc
-	// #include <libiptc/libip6tc.h>
-	// #include <stdlib.h>
-	"C"
 	"net"
 	"unsafe"
 
 	common "github.com/gdm85/go-libiptc"
 )
 
-func cin6addr2ip(cAaddr, cMask C.struct_in6_addr) *net.IPNet {
+func cuint2ip(cAaddr, cMask C.in_addr_t) *net.IPNet {
+	addr := uint32(cAaddr)
 	ip := new(net.IPNet)
-
-	ip.IP = make(net.IP, 16)
-	copy(ip.IP, cAaddr.__in6_u[:])
-	ip.Mask = make(net.IPMask, 16)
-	copy(ip.Mask, cMask.__in6_u[:])
-
+	ip.IP = net.IPv4(byte(addr&0xff),
+		byte((addr>>8)&0xff),
+		byte((addr>>16)&0xff),
+		byte((addr>>24)&0xff))
+	mask := uint32(cMask)
+	ip.Mask = net.IPv4Mask(byte(mask&0xff),
+		byte((mask>>8)&0xff),
+		byte((mask>>16)&0xff),
+		byte((mask>>24)&0xff),
+	)
 	return ip
 }
 
-type Ip6tEntry struct {
-	ip6t_entry_handle *C.struct_ip6t_entry
+type IptEntry struct {
+	ipt_entry_handle *C.struct_ipt_entry
 }
 
-type XtcHandle struct {
+type Xtc4Handle struct {
 	handle *C.struct_xtc_handle
 }
 
-func (h *XtcHandle) Ip6tEntry2Rule(e *Ip6tEntry) *common.Rule {
-	entry := e.ip6t_entry_handle
+func (h *Xtc4Handle) IptEntry2Rule(e *IptEntry) *common.Rule {
+	entry := e.ipt_entry_handle
 	rule := new(common.Rule)
 	rule.Pcnt = uint64(entry.counters.pcnt)
 	rule.Bcnt = uint64(entry.counters.bcnt)
-	rule.InDev = C.GoString(&entry.ipv6.iniface[0])
-	rule.OutDev = C.GoString(&entry.ipv6.outiface[0])
-	if entry.ipv6.invflags&C.IP6T_INV_VIA_IN != 0 {
+	rule.InDev = C.GoString(&entry.ip.iniface[0])
+	rule.OutDev = C.GoString(&entry.ip.outiface[0])
+	if entry.ip.invflags&C.IPT_INV_VIA_IN != 0 {
 		rule.Not.InDev = true
 	}
-	if entry.ipv6.invflags&C.IP6T_INV_VIA_OUT != 0 {
+	if entry.ip.invflags&C.IPT_INV_VIA_OUT != 0 {
 		rule.Not.OutDev = true
 	}
 
-	rule.Src = cin6addr2ip(entry.ipv6.src, entry.ipv6.smsk)
-	if entry.ipv6.invflags&C.IP6T_INV_SRCIP != 0 {
+	rule.Src = cuint2ip(entry.ip.src.s_addr, entry.ip.smsk.s_addr)
+	if entry.ip.invflags&C.IPT_INV_SRCIP != 0 {
 		rule.Not.Src = true
 	}
 
-	rule.Dest = cin6addr2ip(entry.ipv6.dst, entry.ipv6.dmsk)
-	if entry.ipv6.invflags&C.IP6T_INV_DSTIP != 0 {
+	rule.Dest = cuint2ip(entry.ip.dst.s_addr, entry.ip.dmsk.s_addr)
+	if entry.ip.invflags&C.IPT_INV_DSTIP != 0 {
 		rule.Not.Dest = true
 	}
 
-	target := C.ip6tc_get_target(entry, h.handle)
+	target := C.iptc_get_target(entry, h.handle)
 	if target != nil {
 		rule.Target = C.GoString(target)
 	}
@@ -81,39 +87,39 @@ func (h *XtcHandle) Ip6tEntry2Rule(e *Ip6tEntry) *common.Rule {
 }
 
 func getNativeError() string {
-	return C.GoString(C.ip6tc_strerror(C.int(common.GetErrno())))
+	return C.GoString(C.iptc_strerror(C.int(common.GetErrno())))
 }
 
-func (h XtcHandle) Free() error {
+func (h *Xtc4Handle) Free() error {
 	return common.RelayCall(func() bool {
-		C.ip6tc_free(h.handle)
+		C.iptc_free(h.handle)
 		return true
-	}, "ip6tc_free", getNativeError)
+	}, "iptc_free", getNativeError)
 }
 
-func (this Ip6tEntry) IsEmpty() bool {
-	return this.ip6t_entry_handle == nil
+func (this IptEntry) IsEmpty() bool {
+	return this.ipt_entry_handle == nil
 }
 
-func TableInit(tableName string) (result XtcHandle, osErr error) {
+func TableInit(tableName string) (result Xtc4Handle, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(tableName)
 		defer C.free(unsafe.Pointer(cStr))
 
-		h := C.ip6tc_init(cStr)
-		result = XtcHandle{h}
+		h := C.iptc_init(cStr)
+		result = Xtc4Handle{h}
 
 		return h != nil
-	}, "ip6tc_init", getNativeError)
+	}, "iptc_init", getNativeError)
 	return
 }
 
-func (h XtcHandle) IsChain(chain string) (result bool, osErr error) {
+func (h Xtc4Handle) IsChain(chain string) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_is_chain(cStr, h.handle)
+		r := C.iptc_is_chain(cStr, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -122,16 +128,16 @@ func (h XtcHandle) IsChain(chain string) (result bool, osErr error) {
 			return result
 		}
 		panic("invalid return value")
-	}, "ip6tc_is_chain", getNativeError)
+	}, "iptc_is_chain", getNativeError)
 	return
 }
 
-func (h XtcHandle) IsBuiltin(chain string) (result bool, osErr error) {
+func (h Xtc4Handle) IsBuiltin(chain string) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_builtin(cStr, h.handle)
+		r := C.iptc_builtin(cStr, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -140,14 +146,14 @@ func (h XtcHandle) IsBuiltin(chain string) (result bool, osErr error) {
 			return result
 		}
 		panic("invalid return value")
-	}, "ip6tc_builtin", getNativeError)
+	}, "iptc_builtin", getNativeError)
 	return
 }
 
 /* Iterator functions to run through the chains.  Returns NULL at end. */
-func (h XtcHandle) FirstChain() (result string, osErr error) {
+func (h Xtc4Handle) FirstChain() (result string, osErr error) {
 	osErr = common.RelayCall(func() bool {
-		cStr := C.ip6tc_first_chain(h.handle)
+		cStr := C.iptc_first_chain(h.handle)
 		if cStr == nil {
 			result = ""
 			return common.GetErrno() == 0
@@ -155,13 +161,13 @@ func (h XtcHandle) FirstChain() (result string, osErr error) {
 
 		result = C.GoString(cStr)
 		return true
-	}, "ip6tc_first_chain", getNativeError)
+	}, "iptc_first_chain", getNativeError)
 	return
 }
 
-func (h XtcHandle) NextChain() (result string, osErr error) {
+func (h Xtc4Handle) NextChain() (result string, osErr error) {
 	osErr = common.RelayCall(func() bool {
-		cStr := C.ip6tc_next_chain(h.handle)
+		cStr := C.iptc_next_chain(h.handle)
 		if cStr == nil {
 			result = ""
 			return common.GetErrno() == 0
@@ -169,47 +175,47 @@ func (h XtcHandle) NextChain() (result string, osErr error) {
 
 		result = C.GoString(cStr)
 		return true
-	}, "ip6tc_next_chain", getNativeError)
+	}, "iptc_next_chain", getNativeError)
 	return
 }
 
 /* Get first rule in the given chain: NULL for empty chain. */
-func (h XtcHandle) FirstRule(chain string) (result Ip6tEntry, osErr error) {
+func (h Xtc4Handle) FirstRule(chain string) (result IptEntry, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
-		result.ip6t_entry_handle = C.ip6tc_first_rule(cStr, h.handle)
+		result.ipt_entry_handle = C.iptc_first_rule(cStr, h.handle)
 
-		if result.ip6t_entry_handle == nil && common.GetErrno() != 0 {
+		if result.ipt_entry_handle == nil && common.GetErrno() != 0 {
 			// there's some error
 			return false
 		}
 
 		return true
-	}, "ip6tc_first_rule", getNativeError)
+	}, "iptc_first_rule", getNativeError)
 	return
 }
 
 /* Returns NULL when rules run out. */
-func (h XtcHandle) NextRule(previous Ip6tEntry) (result Ip6tEntry, osErr error) {
+func (h Xtc4Handle) NextRule(previous IptEntry) (result IptEntry, osErr error) {
 	osErr = common.RelayCall(func() bool {
-		result.ip6t_entry_handle = C.ip6tc_next_rule(previous.ip6t_entry_handle, h.handle)
+		result.ipt_entry_handle = C.iptc_next_rule(previous.ipt_entry_handle, h.handle)
 
-		if result.ip6t_entry_handle == nil && common.GetErrno() != 0 {
+		if result.ipt_entry_handle == nil && common.GetErrno() != 0 {
 			// there's some error
 			return false
 		}
 
 		return true
-	}, "ip6tc_next_rule", getNativeError)
+	}, "iptc_next_rule", getNativeError)
 	return
 }
 
 /* Returns a pointer to the target name of this entry. */
-func (h XtcHandle) GetTarget(entry Ip6tEntry) (result string, osErr error) {
+func (h Xtc4Handle) GetTarget(entry IptEntry) (result string, osErr error) {
 	osErr = common.RelayCall(func() bool {
-		cStr := C.ip6tc_get_target(entry.ip6t_entry_handle, h.handle)
+		cStr := C.iptc_get_target(entry.ipt_entry_handle, h.handle)
 		if cStr == nil {
 			result = ""
 			return false
@@ -217,18 +223,18 @@ func (h XtcHandle) GetTarget(entry Ip6tEntry) (result string, osErr error) {
 
 		result = C.GoString(cStr)
 		return true
-	}, "ip6tc_get_target", getNativeError)
+	}, "iptc_get_target", getNativeError)
 	return
 }
 
 /* Get the policy of a given built-in chain */
-func (h XtcHandle) GetPolicy(chain string) (policy string, counters common.XtCounters, osErr error) {
+func (h Xtc4Handle) GetPolicy(chain string) (policy string, counters common.XtCounters, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
 		var c _Ctype_struct_xt_counters
-		cStr = C.ip6tc_get_policy(cStr, &c, h.handle)
+		cStr = C.iptc_get_policy(cStr, &c, h.handle)
 		if cStr == nil {
 			// no chains
 			policy = ""
@@ -239,7 +245,7 @@ func (h XtcHandle) GetPolicy(chain string) (policy string, counters common.XtCou
 		counters.Bcnt = uint64(c.bcnt)
 		counters.Pcnt = uint64(c.pcnt)
 		return true
-	}, "ip6tc_get_policy", getNativeError)
+	}, "iptc_get_policy", getNativeError)
 	return
 }
 
@@ -248,12 +254,12 @@ func (h XtcHandle) GetPolicy(chain string) (policy string, counters common.XtCou
 /* Rule numbers start at 1 for the first rule. */
 
 /* Insert the entry `e' in chain `chain' into position `rulenum'. */
-func (h XtcHandle) InsertEntry(chain common.XtChainLabel, entry Ip6tEntry, ruleNum uint) error {
+func (h Xtc4Handle) InsertEntry(chain common.XtChainLabel, entry IptEntry, ruleNum uint) error {
 	return common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_insert_entry(cStr, entry.ip6t_entry_handle, C.uint(ruleNum), h.handle)
+		r := C.iptc_insert_entry(cStr, entry.ipt_entry_handle, C.uint(ruleNum), h.handle)
 		if r == 1 {
 			return true
 		} else if r == 0 {
@@ -262,17 +268,17 @@ func (h XtcHandle) InsertEntry(chain common.XtChainLabel, entry Ip6tEntry, ruleN
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_insert_entry", getNativeError)
+	}, "iptc_insert_entry", getNativeError)
 }
 
 /* Append entry `e' to chain `chain'.  Equivalent to insert with
    rulenum = length of chain. */
-func (h XtcHandle) AppendEntry(chain common.XtChainLabel, entry Ip6tEntry) error {
+func (h Xtc4Handle) AppendEntry(chain common.XtChainLabel, entry IptEntry) error {
 	return common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_append_entry(cStr, entry.ip6t_entry_handle, h.handle)
+		r := C.iptc_append_entry(cStr, entry.ipt_entry_handle, h.handle)
 		if r == 1 {
 			return true
 		} else if r == 0 {
@@ -281,17 +287,17 @@ func (h XtcHandle) AppendEntry(chain common.XtChainLabel, entry Ip6tEntry) error
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_append_entry", getNativeError)
+	}, "iptc_append_entry", getNativeError)
 }
 
 /* Check whether a matching rule exists */
-func (h XtcHandle) CheckEntry(chain common.XtChainLabel, origfw Ip6tEntry, matchMask []byte) (result bool, osErr error) {
+func (h Xtc4Handle) CheckEntry(chain common.XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 		cMask := (*C.uchar)(unsafe.Pointer(&matchMask[0]))
 
-		r := C.ip6tc_check_entry(cStr, origfw.ip6t_entry_handle, cMask, h.handle)
+		r := C.iptc_check_entry(cStr, origfw.ipt_entry_handle, cMask, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -301,19 +307,19 @@ func (h XtcHandle) CheckEntry(chain common.XtChainLabel, origfw Ip6tEntry, match
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_check_entry", getNativeError)
+	}, "iptc_check_entry", getNativeError)
 	return
 }
 
 /* Delete the first rule in `chain' which matches `e', subject to
    matchmask (array of length == origfw) */
-func (h XtcHandle) DeleteEntry(chain common.XtChainLabel, origfw Ip6tEntry, matchMask []byte) (result bool, osErr error) {
+func (h Xtc4Handle) DeleteEntry(chain common.XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 		cMask := (*C.uchar)(unsafe.Pointer(&matchMask[0]))
 
-		r := C.ip6tc_delete_entry(cStr, origfw.ip6t_entry_handle, cMask, h.handle)
+		r := C.iptc_delete_entry(cStr, origfw.ipt_entry_handle, cMask, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -323,17 +329,17 @@ func (h XtcHandle) DeleteEntry(chain common.XtChainLabel, origfw Ip6tEntry, matc
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_delete_entry", getNativeError)
+	}, "iptc_delete_entry", getNativeError)
 	return
 }
 
 /* Delete the rule in position `rulenum' in `chain'. */
-func (h XtcHandle) DeleteNumEntry(chain common.XtChainLabel, ruleNum uint) (result bool, osErr error) {
+func (h Xtc4Handle) DeleteNumEntry(chain common.XtChainLabel, ruleNum uint) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_delete_num_entry(cStr, C.uint(ruleNum), h.handle)
+		r := C.iptc_delete_num_entry(cStr, C.uint(ruleNum), h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -343,23 +349,23 @@ func (h XtcHandle) DeleteNumEntry(chain common.XtChainLabel, ruleNum uint) (resu
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_delete_num_entry", getNativeError)
+	}, "iptc_delete_num_entry", getNativeError)
 	return
 }
 
 /* Check the packet `e' on chain `chain'.  Returns the verdict, or
    NULL and sets errno. */
-/*func (h XtcHandle) CheckPacket(chain common.XtChainLabel, entry Ip6tEntry) error {
+/*func (this XtcHandle) CheckPacket(chain XtChainLabel, entry IptEntry) error {
 	panic("will never be implemented")
 }*/
 
 /* Flushes the entries in the given chain (ie. empties chain). */
-func (h XtcHandle) FlushEntries(chain common.XtChainLabel) (result bool, osErr error) {
+func (h Xtc4Handle) FlushEntries(chain common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_flush_entries(cStr, h.handle)
+		r := C.iptc_flush_entries(cStr, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -369,17 +375,17 @@ func (h XtcHandle) FlushEntries(chain common.XtChainLabel) (result bool, osErr e
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_flush_entries", getNativeError)
+	}, "iptc_flush_entries", getNativeError)
 	return
 }
 
 /* Zeroes the counters in a chain. */
-func (h XtcHandle) ZeroEntries(chain common.XtChainLabel) (result bool, osErr error) {
+func (h Xtc4Handle) ZeroEntries(chain common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_zero_entries(cStr, h.handle)
+		r := C.iptc_zero_entries(cStr, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -389,17 +395,17 @@ func (h XtcHandle) ZeroEntries(chain common.XtChainLabel) (result bool, osErr er
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_zero_entries", getNativeError)
+	}, "iptc_zero_entries", getNativeError)
 	return
 }
 
 /* Creates a new chain. */
-func (h XtcHandle) CreateChain(chain common.XtChainLabel) (result bool, osErr error) {
+func (h Xtc4Handle) CreateChain(chain common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_create_chain(cStr, h.handle)
+		r := C.iptc_create_chain(cStr, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -409,17 +415,17 @@ func (h XtcHandle) CreateChain(chain common.XtChainLabel) (result bool, osErr er
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_create_chain", getNativeError)
+	}, "iptc_create_chain", getNativeError)
 	return
 }
 
 /* Deletes a chain. */
-func (h XtcHandle) DeleteChain(chain common.XtChainLabel) (result bool, osErr error) {
+func (h Xtc4Handle) DeleteChain(chain common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_delete_chain(cStr, h.handle)
+		r := C.iptc_delete_chain(cStr, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -429,19 +435,19 @@ func (h XtcHandle) DeleteChain(chain common.XtChainLabel) (result bool, osErr er
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_delete_chain", getNativeError)
+	}, "iptc_delete_chain", getNativeError)
 	return
 }
 
 /* Renames a chain. */
-func (h XtcHandle) RenameChain(oldName, newName common.XtChainLabel) (result bool, osErr error) {
+func (h Xtc4Handle) RenameChain(oldName, newName common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cOldName := C.CString(string(oldName))
 		defer C.free(unsafe.Pointer(cOldName))
 		cNewName := C.CString(string(newName))
 		defer C.free(unsafe.Pointer(cNewName))
 
-		r := C.ip6tc_rename_chain(cOldName, cNewName, h.handle)
+		r := C.iptc_rename_chain(cOldName, cNewName, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -451,12 +457,12 @@ func (h XtcHandle) RenameChain(oldName, newName common.XtChainLabel) (result boo
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_rename_chain", getNativeError)
+	}, "iptc_rename_chain", getNativeError)
 	return
 }
 
 /* Sets the policy and (optionally) counters on a built-in chain. */
-func (h XtcHandle) SetPolicy(chain common.XtChainLabel, policy common.XtChainLabel, counters *common.XtCounters) (result bool, osErr error) {
+func (h Xtc4Handle) SetPolicy(chain, policy common.XtChainLabel, counters *common.XtCounters) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cChain := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cChain))
@@ -470,7 +476,7 @@ func (h XtcHandle) SetPolicy(chain common.XtChainLabel, policy common.XtChainLab
 			c.pcnt = C.__u64(counters.Pcnt)
 		}
 
-		r := C.ip6tc_set_policy(cChain, cPolicy, c, h.handle)
+		r := C.iptc_set_policy(cChain, cPolicy, c, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -480,19 +486,19 @@ func (h XtcHandle) SetPolicy(chain common.XtChainLabel, policy common.XtChainLab
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_set_policy", getNativeError)
+	}, "iptc_set_policy", getNativeError)
 	return
 }
 
 /* Get the number of references to this chain */
-func (h XtcHandle) GetReferences(chain common.XtChainLabel) (result uint, osErr error) {
+func (h Xtc4Handle) GetReferences(chain common.XtChainLabel) (result uint, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
 		var i C.uint
 
-		r := C.ip6tc_get_references(&i, cStr, h.handle)
+		r := C.iptc_get_references(&i, cStr, h.handle)
 		if r == 1 {
 			// has a valid result
 			result = uint(i)
@@ -503,17 +509,17 @@ func (h XtcHandle) GetReferences(chain common.XtChainLabel) (result uint, osErr 
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_get_references", getNativeError)
+	}, "iptc_get_references", getNativeError)
 	return
 }
 
 /* read packet and byte counters for a specific rule */
-func (h XtcHandle) ReadCounter(chain common.XtChainLabel, ruleNum uint) (result common.XtCounters, osErr error) {
+func (h Xtc4Handle) ReadCounter(chain common.XtChainLabel, ruleNum uint) (result common.XtCounters, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		counters_handle := C.ip6tc_read_counter(cStr, C.uint(ruleNum), h.handle)
+		counters_handle := C.iptc_read_counter(cStr, C.uint(ruleNum), h.handle)
 		if counters_handle == nil {
 			// has an error
 			return false
@@ -522,17 +528,17 @@ func (h XtcHandle) ReadCounter(chain common.XtChainLabel, ruleNum uint) (result 
 		result.Bcnt = uint64(counters_handle.bcnt)
 		result.Pcnt = uint64(counters_handle.pcnt)
 		return true
-	}, "ip6tc_read_counter", getNativeError)
+	}, "iptc_read_counter", getNativeError)
 	return
 }
 
 /* zero packet and byte counters for a specific rule */
-func (h XtcHandle) ZeroCounter(chain common.XtChainLabel, ruleNum uint) (result bool, osErr error) {
+func (h Xtc4Handle) ZeroCounter(chain common.XtChainLabel, ruleNum uint) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_zero_counter(cStr, C.uint(ruleNum), h.handle)
+		r := C.iptc_zero_counter(cStr, C.uint(ruleNum), h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -542,12 +548,12 @@ func (h XtcHandle) ZeroCounter(chain common.XtChainLabel, ruleNum uint) (result 
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_read_counter", getNativeError)
+	}, "iptc_read_counter", getNativeError)
 	return
 }
 
 /* set packet and byte counters for a specific rule */
-func (h XtcHandle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters common.XtCounters) (result bool, osErr error) {
+func (h Xtc4Handle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters common.XtCounters) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -556,7 +562,7 @@ func (h XtcHandle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters 
 		c.bcnt = C.__u64(counters.Bcnt)
 		c.pcnt = C.__u64(counters.Pcnt)
 
-		r := C.ip6tc_set_counter(cStr, C.uint(ruleNum), &c, h.handle)
+		r := C.iptc_set_counter(cStr, C.uint(ruleNum), &c, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -566,14 +572,14 @@ func (h XtcHandle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters 
 		}
 
 		panic("invalid return value")
-	}, "ip6tc_set_counter", getNativeError)
+	}, "iptc_set_counter", getNativeError)
 	return
 }
 
 /* Makes the actual changes. */
-func (h XtcHandle) Commit() error {
+func (h Xtc4Handle) Commit() error {
 	return common.RelayCall(func() bool {
-		r := C.ip6tc_commit(h.handle)
+		r := C.iptc_commit(h.handle)
 		if r == 1 {
 			return true
 		} else if r == 0 {
@@ -581,12 +587,12 @@ func (h XtcHandle) Commit() error {
 		}
 
 		panic("unexpected return value")
-	}, "ip6tc_commit", getNativeError)
+	}, "iptc_commit", getNativeError)
 }
 
-func (h XtcHandle) DumpEntries() error {
+func (h Xtc4Handle) DumpEntries() error {
 	return common.RelayCall(func() bool {
-		C.dump_entries6(h.handle)
+		C.dump_entries(h.handle)
 		return false
-	}, "dump_entries6", getNativeError)
+	}, "dump_entries", getNativeError)
 }

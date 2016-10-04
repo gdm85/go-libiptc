@@ -20,35 +20,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 package libiptc
 
 import (
-	"fmt"
 	"testing"
+
+	common "github.com/gdm85/go-libiptc"
 )
 
-func TestXtablesLock(t *testing.T) {
-	acquired, err := XtablesLock(false, 0)
-	if err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	if !acquired {
-		t.FailNow()
-	}
-
-	released, err := XtablesUnlock()
-	if err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-
-	released, err = XtablesUnlock()
-	if err == nil || released {
-		t.Error(fmt.Errorf("unlocking twice succeeded!"))
-		t.FailNow()
-	}
-}
-
 func TestInit(t *testing.T) {
-	acquired, err := XtablesLock(false, 0)
+	acquired, err := common.XtablesLock(false, 0)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -57,7 +35,7 @@ func TestInit(t *testing.T) {
 		t.FailNow()
 	}
 	defer func() {
-		_, err := XtablesUnlock()
+		_, err := common.XtablesUnlock()
 		if err != nil {
 			panic(err)
 		}

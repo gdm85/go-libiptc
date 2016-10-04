@@ -23,7 +23,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <stdio.h>
 #include <fcntl.h>
 #include <stdlib.h>
-#include <string.h>
 #include <dlfcn.h>
 #include <time.h>
 #include <sys/socket.h>
@@ -31,7 +30,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <stddef.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <xtables.h>
 
 #include "xtables-lock.h"
 
@@ -71,6 +69,7 @@ int xtables_lock(bool wait, uint max_seconds_wait)
 {
 	// trying to acquire lock twice
 	if (xtables_socket >= 0) {
+		errno = EALREADY;
 		return 1;
 	}
 
@@ -82,8 +81,10 @@ int xtables_lock(bool wait, uint max_seconds_wait)
 	strcpy(xt_addr.sun_path+1, XT_SOCKET_NAME);
 	xtables_socket = socket(AF_UNIX, SOCK_STREAM, 0);
 	/* If we can't even create a socket, fall back to prior (lockless) behavior */
-	if (xtables_socket < 0)
+	if (xtables_socket < 0) {
+		// errno is expected to have been set by previous socket() call
 		return xtables_socket;
+	}
 
 	uint waited_seconds = 0;
 	while (waited_seconds <= max_seconds_wait) {
@@ -96,8 +97,10 @@ int xtables_lock(bool wait, uint max_seconds_wait)
 			return 0;
 
 		// fail immediately
-		if (wait == false)
+		if (wait == false) {
+			// errno has been set by the bind() call
 			return 1;
+		}
 
 		// time to wait
 		sleep(1);

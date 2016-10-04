@@ -21,12 +21,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/gdm85/go-libiptc"
 	"os"
 	"time"
+
+	"github.com/gdm85/go-libiptc"
 )
 
 func main() {
+	fmt.Println("acquiring xtables lock immediately...")
 	acquired, err := libiptc.XtablesLock(false, 0)
 	if err != nil {
 		panic(err)
