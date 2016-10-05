@@ -26,6 +26,7 @@ import "C"
 
 import (
 	"net"
+	"runtime"
 	"unsafe"
 
 	common "github.com/gdm85/go-libiptc"
@@ -59,7 +60,7 @@ type XtcHandle struct {
 	handle *C.struct_xtc_handle
 }
 
-func (h *XtcHandle) IptEntry2Rule(e *IptEntry) *common.Rule {
+func (h XtcHandle) IptEntry2Rule(e *IptEntry) *common.Rule {
 	entry := e.handle
 	rule := new(common.Rule)
 	rule.Pcnt = uint64(entry.counters.pcnt)
@@ -96,7 +97,10 @@ func getNativeError() string {
 
 func (h *XtcHandle) Free() error {
 	return common.RelayCall(func() bool {
-		C.iptc_free(h.handle)
+		if h.handle != nil {
+			C.iptc_free(h.handle)
+			h.handle = nil
+		}
 		return true
 	}, "iptc_free", getNativeError)
 }
@@ -111,6 +115,10 @@ func TableInit(tableName string) (result XtcHandle, osErr error) {
 
 		return h != nil
 	}, "iptc_init", getNativeError)
+
+	// set the finalizer before returning the usable result
+	runtime.SetFinalizer(&result, (*XtcHandle).Free)
+
 	return
 }
 
@@ -352,12 +360,6 @@ func (h XtcHandle) DeleteNumEntry(chain common.XtChainLabel, ruleNum uint) (resu
 	}, "iptc_delete_num_entry", getNativeError)
 	return
 }
-
-/* Check the packet `e' on chain `chain'.  Returns the verdict, or
-   NULL and sets errno. */
-/*func (this XtcHandle) CheckPacket(chain XtChainLabel, entry IptEntry) error {
-	panic("will never be implemented")
-}*/
 
 /* Flushes the entries in the given chain (ie. empties chain). */
 func (h XtcHandle) FlushEntries(chain common.XtChainLabel) (result bool, osErr error) {

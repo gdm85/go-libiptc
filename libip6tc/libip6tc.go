@@ -25,6 +25,7 @@ import (
 	// #include <stdlib.h>
 	"C"
 	"net"
+	"runtime"
 	"unsafe"
 
 	common "github.com/gdm85/go-libiptc"
@@ -53,7 +54,7 @@ type XtcHandle struct {
 	handle *C.struct_xtc_handle
 }
 
-func (h *XtcHandle) IptEntry2Rule(e *IptEntry) *common.Rule {
+func (h XtcHandle) IptEntry2Rule(e *IptEntry) *common.Rule {
 	entry := e.handle
 	rule := new(common.Rule)
 	rule.Pcnt = uint64(entry.counters.pcnt)
@@ -88,9 +89,12 @@ func getNativeError() string {
 	return C.GoString(C.ip6tc_strerror(C.int(common.GetErrno())))
 }
 
-func (h XtcHandle) Free() error {
+func (h *XtcHandle) Free() error {
 	return common.RelayCall(func() bool {
-		C.ip6tc_free(h.handle)
+		if h.handle != nil {
+			C.ip6tc_free(h.handle)
+			h.handle = nil
+		}
 		return true
 	}, "ip6tc_free", getNativeError)
 }
@@ -105,6 +109,10 @@ func TableInit(tableName string) (result XtcHandle, osErr error) {
 
 		return h != nil
 	}, "ip6tc_init", getNativeError)
+
+	// set the finalizer before returning the usable result
+	runtime.SetFinalizer(&result, (*XtcHandle).Free)
+
 	return
 }
 
@@ -347,12 +355,6 @@ func (h XtcHandle) DeleteNumEntry(chain common.XtChainLabel, ruleNum uint) (resu
 	return
 }
 
-/* Check the packet `e' on chain `chain'.  Returns the verdict, or
-   NULL and sets errno. */
-/*func (h XtcHandle) CheckPacket(chain common.XtChainLabel, entry IptEntry) error {
-	panic("will never be implemented")
-}*/
-
 /* Flushes the entries in the given chain (ie. empties chain). */
 func (h XtcHandle) FlushEntries(chain common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
@@ -456,7 +458,7 @@ func (h XtcHandle) RenameChain(oldName, newName common.XtChainLabel) (result boo
 }
 
 /* Sets the policy and (optionally) counters on a built-in chain. */
-func (h XtcHandle) SetPolicy(chain common.XtChainLabel, policy common.XtChainLabel, counters *common.XtCounters) (result bool, osErr error) {
+func (h XtcHandle) SetPolicy(chain, policy common.XtChainLabel, counters *common.XtCounters) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cChain := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cChain))
