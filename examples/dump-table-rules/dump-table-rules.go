@@ -24,8 +24,8 @@ import (
 	"os"
 
 	common "github.com/gdm85/go-libiptc"
-	libip4tc "github.com/gdm85/go-libiptc/ipv4"
-	libip6tc "github.com/gdm85/go-libiptc/ipv6"
+	"github.com/gdm85/go-libiptc/libip4tc"
+	"github.com/gdm85/go-libiptc/libip6tc"
 )
 
 func showSyntax() {
@@ -122,7 +122,7 @@ func main() {
 				os.Exit(3)
 			}
 			for !e.IsEmpty() {
-				fmt.Println(chain+":", table.Ip6tEntry2Rule(&e).String())
+				fmt.Println(chain+":", table.IptEntry2Rule(&e).String())
 				e, err = table.NextRule(e)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "dump-table-rules: %s\n", err)

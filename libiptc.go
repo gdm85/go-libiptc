@@ -1,30 +1,37 @@
 package libiptc
 
 import (
-	// #cgo LDFLAGS: -lip6tc
+	// #cgo LDFLAGS: -liptc
 	// #include "xtables-lock.h"
 	"C"
 	"fmt"
 	"net"
 	"runtime"
-	"sync"
 )
 
+// XtChainLabel is a chain label.
 type XtChainLabel string
 
 const (
+	// the constants are copied from #define declarations in libiptc.h
 	IPTC_LABEL_ACCEPT = "ACCEPT"
 	IPTC_LABEL_DROP   = "DROP"
 	IPTC_LABEL_QUEUE  = "QUEUE"
 	IPTC_LABEL_RETURN = "RETURN"
 )
 
+// XtCounters contains packet and byte counters.
 type XtCounters struct {
-	Pcnt, Bcnt uint64
+	// Pcnt is the packet counter.
+	Pcnt uint64
+	// Bcnt is the byte counter.
+	Bcnt uint64
 }
 
+// Not is a shortand for rule negation description.
 type Not bool
 
+// String returns '!' for a negated rule.
 func (n Not) String() string {
 	if n {
 		return "!"
@@ -32,6 +39,7 @@ func (n Not) String() string {
 	return " "
 }
 
+// Rule is a complete iptables rule descriptor.
 type Rule struct {
 	Src    *net.IPNet
 	Dest   *net.IPNet
@@ -47,6 +55,7 @@ type Rule struct {
 	XtCounters
 }
 
+// String returns a human-readable description of a rule.
 func (r Rule) String() string {
 	return fmt.Sprintf("in: %s%s, out: %s%s, %s%s -> %s%s -> %s: %d packets, %d bytes",
 		r.Not.InDev, r.InDev,
@@ -57,20 +66,24 @@ func (r Rule) String() string {
 		r.Pcnt, r.Bcnt)
 }
 
-// RelayedFunc is a function that returns false if there is an 'errno' to query about.
+// RelayedFunc is a function that returns false if there is an 'errno' to query about. Used internally to perform all lib*iptc calls serially.
 type RelayedFunc func() bool
 
+// ErrorFunc generates an error based on a libip*tc_strerror call. Used internally to report about errors.
 type ErrorFunc func() string
 
+// RelayedCall
 type RelayedCall struct {
-	Func    RelayedFunc
-	Error   ErrorFunc
+	// Context is the C function being called.
 	Context string
+	// Func is the function that performs the wrapper around the C function call that does the conversion of input/output parameters.
+	Func RelayedFunc
+	// Error is the specific ErrorFunc needed to extract an error after the C call.
+	Error ErrorFunc
 }
 
 var (
-	lockOSThread sync.Once
-	lastErrors   = make(chan error)
+	callResult   = make(chan error)
 	queueOfCalls = make(chan RelayedCall)
 )
 
@@ -78,9 +91,10 @@ func init() {
 	// start a main loop that will process (serially) all incoming libiptc/libip6tc calls
 	go func() {
 		runtime.LockOSThread()
-		//defer runtime.UnlockOSThread()
 
-		for call := range queueOfCalls {
+		for {
+			call := <-queueOfCalls
+
 			// as extra good measure, reset errno before C-land calls
 			C.reset_errno()
 
@@ -93,7 +107,7 @@ func init() {
 			}
 
 			// this will also signal completion of the call
-			lastErrors <- err
+			callResult <- err
 		}
 	}()
 }
@@ -108,6 +122,7 @@ func getNativeError() string {
 	return C.GoString(C.strerror(C.get_errno()))
 }
 
+// XtablesLock acquires the same lock that a call to `iptables --wait` would.
 func XtablesLock(wait bool, maxSeconds uint) (result bool, osErr error) {
 	osErr = RelayCall(func() bool {
 		r := C.xtables_lock(true, C.uint(maxSeconds))
@@ -123,6 +138,7 @@ func XtablesLock(wait bool, maxSeconds uint) (result bool, osErr error) {
 	return
 }
 
+// XtablesUnlock releases an iptables lock previously acquired with XtablesLock().
 func XtablesUnlock() (result bool, osErr error) {
 	osErr = RelayCall(func() bool {
 		r := C.xtables_unlock()
@@ -138,11 +154,13 @@ func XtablesUnlock() (result bool, osErr error) {
 	return
 }
 
+// GetErrno returns the OS-level errno value. It is used internally to properly report about errors.
 func GetErrno() int {
 	return int(C.get_errno())
 }
 
+// RelayCall will perform the C call on a OS-locked goroutine, serially.
 func RelayCall(f RelayedFunc, context string, e ErrorFunc) error {
 	queueOfCalls <- RelayedCall{Func: f, Context: context, Error: e}
-	return <-lastErrors
+	return <-callResult
 }

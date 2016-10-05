@@ -17,7 +17,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-package libiptc
+package libip4tc
 
 // #cgo LDFLAGS: -lip4tc
 // #include <libiptc/libiptc.h>
@@ -48,15 +48,19 @@ func cuint2ip(cAaddr, cMask C.in_addr_t) *net.IPNet {
 }
 
 type IptEntry struct {
-	ipt_entry_handle *C.struct_ipt_entry
+	handle *C.struct_ipt_entry
 }
 
-type Xtc4Handle struct {
+func (h IptEntry) IsEmpty() bool {
+	return h.handle == nil
+}
+
+type XtcHandle struct {
 	handle *C.struct_xtc_handle
 }
 
-func (h *Xtc4Handle) IptEntry2Rule(e *IptEntry) *common.Rule {
-	entry := e.ipt_entry_handle
+func (h *XtcHandle) IptEntry2Rule(e *IptEntry) *common.Rule {
+	entry := e.handle
 	rule := new(common.Rule)
 	rule.Pcnt = uint64(entry.counters.pcnt)
 	rule.Bcnt = uint64(entry.counters.bcnt)
@@ -90,31 +94,27 @@ func getNativeError() string {
 	return C.GoString(C.iptc_strerror(C.int(common.GetErrno())))
 }
 
-func (h *Xtc4Handle) Free() error {
+func (h *XtcHandle) Free() error {
 	return common.RelayCall(func() bool {
 		C.iptc_free(h.handle)
 		return true
 	}, "iptc_free", getNativeError)
 }
 
-func (this IptEntry) IsEmpty() bool {
-	return this.ipt_entry_handle == nil
-}
-
-func TableInit(tableName string) (result Xtc4Handle, osErr error) {
+func TableInit(tableName string) (result XtcHandle, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(tableName)
 		defer C.free(unsafe.Pointer(cStr))
 
 		h := C.iptc_init(cStr)
-		result = Xtc4Handle{h}
+		result = XtcHandle{h}
 
 		return h != nil
 	}, "iptc_init", getNativeError)
 	return
 }
 
-func (h Xtc4Handle) IsChain(chain string) (result bool, osErr error) {
+func (h XtcHandle) IsChain(chain string) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
@@ -132,7 +132,7 @@ func (h Xtc4Handle) IsChain(chain string) (result bool, osErr error) {
 	return
 }
 
-func (h Xtc4Handle) IsBuiltin(chain string) (result bool, osErr error) {
+func (h XtcHandle) IsBuiltin(chain string) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
@@ -151,7 +151,7 @@ func (h Xtc4Handle) IsBuiltin(chain string) (result bool, osErr error) {
 }
 
 /* Iterator functions to run through the chains.  Returns NULL at end. */
-func (h Xtc4Handle) FirstChain() (result string, osErr error) {
+func (h XtcHandle) FirstChain() (result string, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.iptc_first_chain(h.handle)
 		if cStr == nil {
@@ -165,7 +165,7 @@ func (h Xtc4Handle) FirstChain() (result string, osErr error) {
 	return
 }
 
-func (h Xtc4Handle) NextChain() (result string, osErr error) {
+func (h XtcHandle) NextChain() (result string, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.iptc_next_chain(h.handle)
 		if cStr == nil {
@@ -180,14 +180,14 @@ func (h Xtc4Handle) NextChain() (result string, osErr error) {
 }
 
 /* Get first rule in the given chain: NULL for empty chain. */
-func (h Xtc4Handle) FirstRule(chain string) (result IptEntry, osErr error) {
+func (h XtcHandle) FirstRule(chain string) (result IptEntry, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
-		result.ipt_entry_handle = C.iptc_first_rule(cStr, h.handle)
+		result.handle = C.iptc_first_rule(cStr, h.handle)
 
-		if result.ipt_entry_handle == nil && common.GetErrno() != 0 {
+		if result.handle == nil && common.GetErrno() != 0 {
 			// there's some error
 			return false
 		}
@@ -198,11 +198,11 @@ func (h Xtc4Handle) FirstRule(chain string) (result IptEntry, osErr error) {
 }
 
 /* Returns NULL when rules run out. */
-func (h Xtc4Handle) NextRule(previous IptEntry) (result IptEntry, osErr error) {
+func (h XtcHandle) NextRule(previous IptEntry) (result IptEntry, osErr error) {
 	osErr = common.RelayCall(func() bool {
-		result.ipt_entry_handle = C.iptc_next_rule(previous.ipt_entry_handle, h.handle)
+		result.handle = C.iptc_next_rule(previous.handle, h.handle)
 
-		if result.ipt_entry_handle == nil && common.GetErrno() != 0 {
+		if result.handle == nil && common.GetErrno() != 0 {
 			// there's some error
 			return false
 		}
@@ -213,9 +213,9 @@ func (h Xtc4Handle) NextRule(previous IptEntry) (result IptEntry, osErr error) {
 }
 
 /* Returns a pointer to the target name of this entry. */
-func (h Xtc4Handle) GetTarget(entry IptEntry) (result string, osErr error) {
+func (h XtcHandle) GetTarget(entry IptEntry) (result string, osErr error) {
 	osErr = common.RelayCall(func() bool {
-		cStr := C.iptc_get_target(entry.ipt_entry_handle, h.handle)
+		cStr := C.iptc_get_target(entry.handle, h.handle)
 		if cStr == nil {
 			result = ""
 			return false
@@ -228,7 +228,7 @@ func (h Xtc4Handle) GetTarget(entry IptEntry) (result string, osErr error) {
 }
 
 /* Get the policy of a given built-in chain */
-func (h Xtc4Handle) GetPolicy(chain string) (policy string, counters common.XtCounters, osErr error) {
+func (h XtcHandle) GetPolicy(chain string) (policy string, counters common.XtCounters, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
@@ -254,12 +254,12 @@ func (h Xtc4Handle) GetPolicy(chain string) (policy string, counters common.XtCo
 /* Rule numbers start at 1 for the first rule. */
 
 /* Insert the entry `e' in chain `chain' into position `rulenum'. */
-func (h Xtc4Handle) InsertEntry(chain common.XtChainLabel, entry IptEntry, ruleNum uint) error {
+func (h XtcHandle) InsertEntry(chain common.XtChainLabel, entry IptEntry, ruleNum uint) error {
 	return common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.iptc_insert_entry(cStr, entry.ipt_entry_handle, C.uint(ruleNum), h.handle)
+		r := C.iptc_insert_entry(cStr, entry.handle, C.uint(ruleNum), h.handle)
 		if r == 1 {
 			return true
 		} else if r == 0 {
@@ -273,12 +273,12 @@ func (h Xtc4Handle) InsertEntry(chain common.XtChainLabel, entry IptEntry, ruleN
 
 /* Append entry `e' to chain `chain'.  Equivalent to insert with
    rulenum = length of chain. */
-func (h Xtc4Handle) AppendEntry(chain common.XtChainLabel, entry IptEntry) error {
+func (h XtcHandle) AppendEntry(chain common.XtChainLabel, entry IptEntry) error {
 	return common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.iptc_append_entry(cStr, entry.ipt_entry_handle, h.handle)
+		r := C.iptc_append_entry(cStr, entry.handle, h.handle)
 		if r == 1 {
 			return true
 		} else if r == 0 {
@@ -291,13 +291,13 @@ func (h Xtc4Handle) AppendEntry(chain common.XtChainLabel, entry IptEntry) error
 }
 
 /* Check whether a matching rule exists */
-func (h Xtc4Handle) CheckEntry(chain common.XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
+func (h XtcHandle) CheckEntry(chain common.XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 		cMask := (*C.uchar)(unsafe.Pointer(&matchMask[0]))
 
-		r := C.iptc_check_entry(cStr, origfw.ipt_entry_handle, cMask, h.handle)
+		r := C.iptc_check_entry(cStr, origfw.handle, cMask, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -313,13 +313,13 @@ func (h Xtc4Handle) CheckEntry(chain common.XtChainLabel, origfw IptEntry, match
 
 /* Delete the first rule in `chain' which matches `e', subject to
    matchmask (array of length == origfw) */
-func (h Xtc4Handle) DeleteEntry(chain common.XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
+func (h XtcHandle) DeleteEntry(chain common.XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 		cMask := (*C.uchar)(unsafe.Pointer(&matchMask[0]))
 
-		r := C.iptc_delete_entry(cStr, origfw.ipt_entry_handle, cMask, h.handle)
+		r := C.iptc_delete_entry(cStr, origfw.handle, cMask, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -334,7 +334,7 @@ func (h Xtc4Handle) DeleteEntry(chain common.XtChainLabel, origfw IptEntry, matc
 }
 
 /* Delete the rule in position `rulenum' in `chain'. */
-func (h Xtc4Handle) DeleteNumEntry(chain common.XtChainLabel, ruleNum uint) (result bool, osErr error) {
+func (h XtcHandle) DeleteNumEntry(chain common.XtChainLabel, ruleNum uint) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -360,7 +360,7 @@ func (h Xtc4Handle) DeleteNumEntry(chain common.XtChainLabel, ruleNum uint) (res
 }*/
 
 /* Flushes the entries in the given chain (ie. empties chain). */
-func (h Xtc4Handle) FlushEntries(chain common.XtChainLabel) (result bool, osErr error) {
+func (h XtcHandle) FlushEntries(chain common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -380,7 +380,7 @@ func (h Xtc4Handle) FlushEntries(chain common.XtChainLabel) (result bool, osErr 
 }
 
 /* Zeroes the counters in a chain. */
-func (h Xtc4Handle) ZeroEntries(chain common.XtChainLabel) (result bool, osErr error) {
+func (h XtcHandle) ZeroEntries(chain common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -400,7 +400,7 @@ func (h Xtc4Handle) ZeroEntries(chain common.XtChainLabel) (result bool, osErr e
 }
 
 /* Creates a new chain. */
-func (h Xtc4Handle) CreateChain(chain common.XtChainLabel) (result bool, osErr error) {
+func (h XtcHandle) CreateChain(chain common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -420,7 +420,7 @@ func (h Xtc4Handle) CreateChain(chain common.XtChainLabel) (result bool, osErr e
 }
 
 /* Deletes a chain. */
-func (h Xtc4Handle) DeleteChain(chain common.XtChainLabel) (result bool, osErr error) {
+func (h XtcHandle) DeleteChain(chain common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -440,7 +440,7 @@ func (h Xtc4Handle) DeleteChain(chain common.XtChainLabel) (result bool, osErr e
 }
 
 /* Renames a chain. */
-func (h Xtc4Handle) RenameChain(oldName, newName common.XtChainLabel) (result bool, osErr error) {
+func (h XtcHandle) RenameChain(oldName, newName common.XtChainLabel) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cOldName := C.CString(string(oldName))
 		defer C.free(unsafe.Pointer(cOldName))
@@ -462,7 +462,7 @@ func (h Xtc4Handle) RenameChain(oldName, newName common.XtChainLabel) (result bo
 }
 
 /* Sets the policy and (optionally) counters on a built-in chain. */
-func (h Xtc4Handle) SetPolicy(chain, policy common.XtChainLabel, counters *common.XtCounters) (result bool, osErr error) {
+func (h XtcHandle) SetPolicy(chain, policy common.XtChainLabel, counters *common.XtCounters) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cChain := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cChain))
@@ -491,7 +491,7 @@ func (h Xtc4Handle) SetPolicy(chain, policy common.XtChainLabel, counters *commo
 }
 
 /* Get the number of references to this chain */
-func (h Xtc4Handle) GetReferences(chain common.XtChainLabel) (result uint, osErr error) {
+func (h XtcHandle) GetReferences(chain common.XtChainLabel) (result uint, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -514,7 +514,7 @@ func (h Xtc4Handle) GetReferences(chain common.XtChainLabel) (result uint, osErr
 }
 
 /* read packet and byte counters for a specific rule */
-func (h Xtc4Handle) ReadCounter(chain common.XtChainLabel, ruleNum uint) (result common.XtCounters, osErr error) {
+func (h XtcHandle) ReadCounter(chain common.XtChainLabel, ruleNum uint) (result common.XtCounters, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -533,7 +533,7 @@ func (h Xtc4Handle) ReadCounter(chain common.XtChainLabel, ruleNum uint) (result
 }
 
 /* zero packet and byte counters for a specific rule */
-func (h Xtc4Handle) ZeroCounter(chain common.XtChainLabel, ruleNum uint) (result bool, osErr error) {
+func (h XtcHandle) ZeroCounter(chain common.XtChainLabel, ruleNum uint) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -552,8 +552,8 @@ func (h Xtc4Handle) ZeroCounter(chain common.XtChainLabel, ruleNum uint) (result
 	return
 }
 
-/* set packet and byte counters for a specific rule */
-func (h Xtc4Handle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters common.XtCounters) (result bool, osErr error) {
+// SetCounter sets packet and byte counters for a specific rule.
+func (h XtcHandle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters common.XtCounters) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
@@ -576,8 +576,8 @@ func (h Xtc4Handle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters
 	return
 }
 
-/* Makes the actual changes. */
-func (h Xtc4Handle) Commit() error {
+// Commit makes the actual changes.
+func (h XtcHandle) Commit() error {
 	return common.RelayCall(func() bool {
 		r := C.iptc_commit(h.handle)
 		if r == 1 {
@@ -590,7 +590,8 @@ func (h Xtc4Handle) Commit() error {
 	}, "iptc_commit", getNativeError)
 }
 
-func (h Xtc4Handle) DumpEntries() error {
+// DumpEntries will use an internal undocumented function to dump all table entries to stdout.
+func (h XtcHandle) DumpEntries() error {
 	return common.RelayCall(func() bool {
 		C.dump_entries(h.handle)
 		return false

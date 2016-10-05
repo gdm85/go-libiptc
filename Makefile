@@ -1,10 +1,11 @@
-SRCFILES := *.go ipv4/*.go ipv6/*.go
+SRCFILES := *.go libip4tc/*.go libip6tc/*.go
 
 all: build examples
 
 build:
-	cd ipv4 && go build
-	cd ipv6 && go build
+	go build
+	cd libip4tc && go build
+	cd libip6tc && go build
 
 test:
 	go test

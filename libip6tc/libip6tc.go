@@ -1,6 +1,6 @@
 /*
- * go-libip6tc v0.2.1 - libip6tc bindings for Go language
- * Copyright (C) 2015~2016 gdm85 - https://github.com/gdm85/go-libip6tc/
+ * go-libiptc v0.3.0 - libiptc bindings for Go language
+ * Copyright (C) 2015~2016 gdm85 - https://github.com/gdm85/go-libiptc/
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -17,7 +17,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-package libiptc
+package libip6tc
 
 import (
 	// #cgo LDFLAGS: -lip6tc
@@ -41,16 +41,20 @@ func cin6addr2ip(cAaddr, cMask C.struct_in6_addr) *net.IPNet {
 	return ip
 }
 
-type Ip6tEntry struct {
-	ip6t_entry_handle *C.struct_ip6t_entry
+type IptEntry struct {
+	handle *C.struct_ip6t_entry
+}
+
+func (h IptEntry) IsEmpty() bool {
+	return h.handle == nil
 }
 
 type XtcHandle struct {
 	handle *C.struct_xtc_handle
 }
 
-func (h *XtcHandle) Ip6tEntry2Rule(e *Ip6tEntry) *common.Rule {
-	entry := e.ip6t_entry_handle
+func (h *XtcHandle) IptEntry2Rule(e *IptEntry) *common.Rule {
+	entry := e.handle
 	rule := new(common.Rule)
 	rule.Pcnt = uint64(entry.counters.pcnt)
 	rule.Bcnt = uint64(entry.counters.bcnt)
@@ -89,10 +93,6 @@ func (h XtcHandle) Free() error {
 		C.ip6tc_free(h.handle)
 		return true
 	}, "ip6tc_free", getNativeError)
-}
-
-func (this Ip6tEntry) IsEmpty() bool {
-	return this.ip6t_entry_handle == nil
 }
 
 func TableInit(tableName string) (result XtcHandle, osErr error) {
@@ -174,14 +174,14 @@ func (h XtcHandle) NextChain() (result string, osErr error) {
 }
 
 /* Get first rule in the given chain: NULL for empty chain. */
-func (h XtcHandle) FirstRule(chain string) (result Ip6tEntry, osErr error) {
+func (h XtcHandle) FirstRule(chain string) (result IptEntry, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
-		result.ip6t_entry_handle = C.ip6tc_first_rule(cStr, h.handle)
+		result.handle = C.ip6tc_first_rule(cStr, h.handle)
 
-		if result.ip6t_entry_handle == nil && common.GetErrno() != 0 {
+		if result.handle == nil && common.GetErrno() != 0 {
 			// there's some error
 			return false
 		}
@@ -192,11 +192,11 @@ func (h XtcHandle) FirstRule(chain string) (result Ip6tEntry, osErr error) {
 }
 
 /* Returns NULL when rules run out. */
-func (h XtcHandle) NextRule(previous Ip6tEntry) (result Ip6tEntry, osErr error) {
+func (h XtcHandle) NextRule(previous IptEntry) (result IptEntry, osErr error) {
 	osErr = common.RelayCall(func() bool {
-		result.ip6t_entry_handle = C.ip6tc_next_rule(previous.ip6t_entry_handle, h.handle)
+		result.handle = C.ip6tc_next_rule(previous.handle, h.handle)
 
-		if result.ip6t_entry_handle == nil && common.GetErrno() != 0 {
+		if result.handle == nil && common.GetErrno() != 0 {
 			// there's some error
 			return false
 		}
@@ -207,9 +207,9 @@ func (h XtcHandle) NextRule(previous Ip6tEntry) (result Ip6tEntry, osErr error) 
 }
 
 /* Returns a pointer to the target name of this entry. */
-func (h XtcHandle) GetTarget(entry Ip6tEntry) (result string, osErr error) {
+func (h XtcHandle) GetTarget(entry IptEntry) (result string, osErr error) {
 	osErr = common.RelayCall(func() bool {
-		cStr := C.ip6tc_get_target(entry.ip6t_entry_handle, h.handle)
+		cStr := C.ip6tc_get_target(entry.handle, h.handle)
 		if cStr == nil {
 			result = ""
 			return false
@@ -221,7 +221,7 @@ func (h XtcHandle) GetTarget(entry Ip6tEntry) (result string, osErr error) {
 	return
 }
 
-/* Get the policy of a given built-in chain */
+// GetPolicy gets the policy of a given built-in chain.
 func (h XtcHandle) GetPolicy(chain string) (policy string, counters common.XtCounters, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(chain)
@@ -248,12 +248,12 @@ func (h XtcHandle) GetPolicy(chain string) (policy string, counters common.XtCou
 /* Rule numbers start at 1 for the first rule. */
 
 /* Insert the entry `e' in chain `chain' into position `rulenum'. */
-func (h XtcHandle) InsertEntry(chain common.XtChainLabel, entry Ip6tEntry, ruleNum uint) error {
+func (h XtcHandle) InsertEntry(chain common.XtChainLabel, entry IptEntry, ruleNum uint) error {
 	return common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_insert_entry(cStr, entry.ip6t_entry_handle, C.uint(ruleNum), h.handle)
+		r := C.ip6tc_insert_entry(cStr, entry.handle, C.uint(ruleNum), h.handle)
 		if r == 1 {
 			return true
 		} else if r == 0 {
@@ -267,12 +267,12 @@ func (h XtcHandle) InsertEntry(chain common.XtChainLabel, entry Ip6tEntry, ruleN
 
 /* Append entry `e' to chain `chain'.  Equivalent to insert with
    rulenum = length of chain. */
-func (h XtcHandle) AppendEntry(chain common.XtChainLabel, entry Ip6tEntry) error {
+func (h XtcHandle) AppendEntry(chain common.XtChainLabel, entry IptEntry) error {
 	return common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		r := C.ip6tc_append_entry(cStr, entry.ip6t_entry_handle, h.handle)
+		r := C.ip6tc_append_entry(cStr, entry.handle, h.handle)
 		if r == 1 {
 			return true
 		} else if r == 0 {
@@ -285,13 +285,13 @@ func (h XtcHandle) AppendEntry(chain common.XtChainLabel, entry Ip6tEntry) error
 }
 
 /* Check whether a matching rule exists */
-func (h XtcHandle) CheckEntry(chain common.XtChainLabel, origfw Ip6tEntry, matchMask []byte) (result bool, osErr error) {
+func (h XtcHandle) CheckEntry(chain common.XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 		cMask := (*C.uchar)(unsafe.Pointer(&matchMask[0]))
 
-		r := C.ip6tc_check_entry(cStr, origfw.ip6t_entry_handle, cMask, h.handle)
+		r := C.ip6tc_check_entry(cStr, origfw.handle, cMask, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -307,13 +307,13 @@ func (h XtcHandle) CheckEntry(chain common.XtChainLabel, origfw Ip6tEntry, match
 
 /* Delete the first rule in `chain' which matches `e', subject to
    matchmask (array of length == origfw) */
-func (h XtcHandle) DeleteEntry(chain common.XtChainLabel, origfw Ip6tEntry, matchMask []byte) (result bool, osErr error) {
+func (h XtcHandle) DeleteEntry(chain common.XtChainLabel, origfw IptEntry, matchMask []byte) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 		cMask := (*C.uchar)(unsafe.Pointer(&matchMask[0]))
 
-		r := C.ip6tc_delete_entry(cStr, origfw.ip6t_entry_handle, cMask, h.handle)
+		r := C.ip6tc_delete_entry(cStr, origfw.handle, cMask, h.handle)
 		if r == 1 {
 			result = true
 			return result
@@ -349,7 +349,7 @@ func (h XtcHandle) DeleteNumEntry(chain common.XtChainLabel, ruleNum uint) (resu
 
 /* Check the packet `e' on chain `chain'.  Returns the verdict, or
    NULL and sets errno. */
-/*func (h XtcHandle) CheckPacket(chain common.XtChainLabel, entry Ip6tEntry) error {
+/*func (h XtcHandle) CheckPacket(chain common.XtChainLabel, entry IptEntry) error {
 	panic("will never be implemented")
 }*/
 
@@ -546,7 +546,7 @@ func (h XtcHandle) ZeroCounter(chain common.XtChainLabel, ruleNum uint) (result 
 	return
 }
 
-/* set packet and byte counters for a specific rule */
+// SetCounter sets packet and byte counters for a specific rule.
 func (h XtcHandle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters common.XtCounters) (result bool, osErr error) {
 	osErr = common.RelayCall(func() bool {
 		cStr := C.CString(string(chain))
@@ -570,7 +570,7 @@ func (h XtcHandle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters 
 	return
 }
 
-/* Makes the actual changes. */
+// Commit makes the actual changes.
 func (h XtcHandle) Commit() error {
 	return common.RelayCall(func() bool {
 		r := C.ip6tc_commit(h.handle)
@@ -584,6 +584,7 @@ func (h XtcHandle) Commit() error {
 	}, "ip6tc_commit", getNativeError)
 }
 
+// DumpEntries will use an internal undocumented function to dump all table entries to stdout.
 func (h XtcHandle) DumpEntries() error {
 	return common.RelayCall(func() bool {
 		C.dump_entries6(h.handle)

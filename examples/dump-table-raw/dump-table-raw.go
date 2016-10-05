@@ -24,8 +24,8 @@ import (
 	"os"
 
 	common "github.com/gdm85/go-libiptc"
-	libip4tc "github.com/gdm85/go-libiptc/ipv4"
-	libip6tc "github.com/gdm85/go-libiptc/ipv6"
+	"github.com/gdm85/go-libiptc/libip4tc"
+	"github.com/gdm85/go-libiptc/libip6tc"
 )
 
 func showSyntax() {
