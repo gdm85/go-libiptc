@@ -20,12 +20,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 package libiptc
 
 import (
-	// #cgo LDFLAGS: -liptc
+	// #cgo LDFLAGS: -l:libiptc.so.0
 	// #include "xtables-lock.h"
 	"C"
 	"fmt"
 	"net"
-	"runtime"
+	//"runtime"
 )
 
 // XtChainLabel is a chain label.
@@ -109,7 +109,7 @@ var (
 func init() {
 	// start a main loop that will process (serially) all incoming libiptc/libip6tc calls
 	go func() {
-		runtime.LockOSThread()
+		// runtime.LockOSThread()
 
 		for {
 			call := <-queueOfCalls
