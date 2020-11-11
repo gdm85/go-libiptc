@@ -20,7 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 package libip6tc
 
 import (
-	// #cgo LDFLAGS: -lip6tc
+	// #cgo LDFLAGS: -l:libip6tc.so.0
 	// #include <libiptc/libip6tc.h>
 	// #include <stdlib.h>
 	"C"
@@ -235,7 +235,7 @@ func (h XtcHandle) GetPolicy(chain string) (policy string, counters common.XtCou
 		cStr := C.CString(chain)
 		defer C.free(unsafe.Pointer(cStr))
 
-		var c _Ctype_struct_xt_counters
+		var c C.struct_xt_counters
 		cStr = C.ip6tc_get_policy(cStr, &c, h.handle)
 		if cStr == nil {
 			// no chains
@@ -465,9 +465,9 @@ func (h XtcHandle) SetPolicy(chain, policy common.XtChainLabel, counters *common
 		cPolicy := C.CString(string(policy))
 		defer C.free(unsafe.Pointer(cPolicy))
 
-		var c *_Ctype_struct_xt_counters
+		var c *C.struct_xt_counters
 		if counters != nil {
-			c = &_Ctype_struct_xt_counters{}
+			c = &C.struct_xt_counters{}
 			c.bcnt = C.__u64(counters.Bcnt)
 			c.pcnt = C.__u64(counters.Pcnt)
 		}
@@ -554,7 +554,7 @@ func (h XtcHandle) SetCounter(chain common.XtChainLabel, ruleNum uint, counters 
 		cStr := C.CString(string(chain))
 		defer C.free(unsafe.Pointer(cStr))
 
-		var c _Ctype_struct_xt_counters
+		var c C.struct_xt_counters
 		c.bcnt = C.__u64(counters.Bcnt)
 		c.pcnt = C.__u64(counters.Pcnt)
 
